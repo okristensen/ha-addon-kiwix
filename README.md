@@ -32,7 +32,27 @@ built-in web page, and the app downloads it and serves it on your local network.
 
 Supported architectures: `aarch64`, `amd64`.
 
-## Dashboard card
+## Dashboard
+
+### The whole app on a dashboard
+
+`dashboard/kiwix-app-card.js` is a custom card that shows the full app (library,
+catalog and reader) on a dashboard, exactly as when it is opened from the sidebar.
+Home Assistant only serves an app's page to browsers that hold an ingress session, so
+a plain iframe fails with `401`; the card creates and renews that session itself.
+
+1. Add `kiwix-app-card.js` as a dashboard resource of type **JavaScript module**
+   (Settings → Dashboards → ⋮ → Resources, or copy it to `/config/www/` and use
+   `/local/kiwix-app-card.js`).
+2. Add a view of type **Panel** with this card:
+
+   ```yaml
+   type: custom:kiwix-app-card
+   ```
+
+The card finds the app by itself (or set `app: <slug>`), and needs an admin user.
+
+### Library summary
 
 The app publishes the library as `sensor.kiwix_library`: the state is the number of
 ZIM files, and the attributes list the files (`name`, `file`, `date`, `size_gb`),
