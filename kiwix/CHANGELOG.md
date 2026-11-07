@@ -1,5 +1,9 @@
 # Changelog
 
+## 1.4.2
+
+- Front page: search suggestions show the plain article title instead of Kiwix's highlight markup.
+
 ## 1.4.1
 
 - Front page: fix "No such book" when searching. Books are now addressed by the name Kiwix uses in

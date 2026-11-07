@@ -335,7 +335,7 @@
         const li = document.createElement("li");
         const a = document.createElement("a");
         a.href = `viewer#${encodeURIComponent(book.id)}/${item.path.split("/").map(encodeURIComponent).join("/")}`;
-        const t = document.createElement("span"); t.textContent = item.label || item.value;
+        const t = document.createElement("span"); t.textContent = item.value || (item.label || "").replace(/&lt;\/?b&gt;/g, "");
         a.appendChild(t);
         if (books.length > 1) { const s = document.createElement("small"); s.textContent = book.title; a.appendChild(s); }
         li.appendChild(a); box.appendChild(li);
