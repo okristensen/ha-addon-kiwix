@@ -81,7 +81,7 @@ class KiwixAppCard extends HTMLElement {
         });
       }, 5 * 60 * 1000);
 
-      this._render(`<iframe src="${info.ingress_url}" allow="fullscreen"></iframe>`);
+      this._render(`<iframe src="${info.ingress_url}reader/" allow="fullscreen"></iframe>`);
       window.addEventListener("resize", this._onResize);
       requestAnimationFrame(() => this._fit());
       setTimeout(() => this._fit(), 500);
