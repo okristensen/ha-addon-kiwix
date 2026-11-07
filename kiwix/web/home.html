@@ -383,7 +383,7 @@
       $("manage").hidden = !me.admin;
       if (me.network) {
         const net = $("net");
-        net.textContent = me.network === "local" ? T.netLocal : T.netRemote;
+        net.textContent = (me.network === "local" ? T.netLocal : T.netRemote) + (me.client_ip ? ` · ${me.client_ip}` : "");
         net.classList.toggle("remote", me.network === "remote");
         net.hidden = false;
       }

@@ -1,5 +1,10 @@
 # Changelog
 
+## 1.6.1
+
+- The network pill also shows the address Home Assistant sees for you, to tell a home address from your
+  router's public one.
+
 ## 1.6.0
 
 - The front page shows whether you reach Home Assistant from the home network or over the internet
