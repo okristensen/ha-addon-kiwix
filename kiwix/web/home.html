@@ -1,0 +1,342 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+  <title>Kiwix</title>
+  <style>
+    :root {
+      color-scheme: light dark;
+      --bg: #f3f5f8;
+      --card: #ffffff;
+      --text: #14181d;
+      --muted: #66707c;
+      --border: #e1e5ea;
+      --accent: #0a8ee8;
+      --accent-2: #5b6cf0;
+      --chip: #eef1f5;
+      --shadow: 0 1px 2px rgba(16, 24, 40, .06), 0 6px 18px rgba(16, 24, 40, .06);
+    }
+    @media (prefers-color-scheme: dark) {
+      :root {
+        --bg: #0f1216;
+        --card: #1a1e24;
+        --text: #eceff3;
+        --muted: #8d97a3;
+        --border: #292f37;
+        --chip: #252b33;
+        --shadow: 0 1px 2px rgba(0, 0, 0, .4), 0 6px 18px rgba(0, 0, 0, .3);
+      }
+    }
+    * { box-sizing: border-box; -webkit-tap-highlight-color: transparent; }
+    html, body { margin: 0; }
+    body {
+      background: var(--bg);
+      color: var(--text);
+      font: 16px/1.45 system-ui, -apple-system, "Segoe UI", Roboto, sans-serif;
+      padding: env(safe-area-inset-top) 0 env(safe-area-inset-bottom);
+    }
+    a { color: inherit; text-decoration: none; }
+    .wrap { max-width: 980px; margin: 0 auto; padding: 0 16px 40px; }
+
+    .top { display: flex; justify-content: flex-start; padding: 14px 0 0; }
+    .manage {
+      display: inline-flex; align-items: center; gap: 8px;
+      padding: 9px 14px; border-radius: 999px;
+      background: var(--card); border: 1px solid var(--border);
+      box-shadow: var(--shadow);
+      font-size: 14px; font-weight: 600;
+    }
+    .manage svg { width: 18px; height: 18px; }
+
+    .hero { text-align: center; padding: 28px 0 8px; }
+    .logo {
+      width: 64px; height: 64px; margin: 0 auto 10px; border-radius: 20px;
+      display: grid; place-items: center; color: #fff;
+      background: linear-gradient(135deg, var(--accent), var(--accent-2));
+      box-shadow: 0 10px 24px rgba(10, 142, 232, .35);
+    }
+    .logo svg { width: 36px; height: 36px; }
+    h1 { margin: 0; font-size: 34px; letter-spacing: -.02em; }
+    .sub { margin: 4px 0 20px; color: var(--muted); font-size: 14px; }
+
+    .search { position: relative; max-width: 640px; margin: 0 auto; }
+    .search form {
+      display: flex; align-items: center; gap: 10px;
+      background: var(--card); border: 1px solid var(--border);
+      border-radius: 18px; padding: 6px 6px 6px 16px; box-shadow: var(--shadow);
+    }
+    .search form:focus-within { border-color: var(--accent); }
+    .search svg { width: 22px; height: 22px; color: var(--muted); flex: none; }
+    .search input {
+      flex: 1; min-width: 0; border: 0; outline: 0; background: none;
+      color: var(--text); font: inherit; font-size: 17px; padding: 12px 0;
+    }
+    .search button {
+      border: 0; border-radius: 13px; padding: 12px 18px; cursor: pointer;
+      color: #fff; font: inherit; font-weight: 600; font-size: 15px;
+      background: linear-gradient(135deg, var(--accent), var(--accent-2));
+    }
+    .scopes { display: flex; gap: 8px; justify-content: center; flex-wrap: wrap; margin-top: 12px; }
+    .scope {
+      border: 1px solid var(--border); background: var(--card); color: var(--muted);
+      border-radius: 999px; padding: 6px 12px; font: inherit; font-size: 13px; cursor: pointer;
+    }
+    .scope[aria-pressed="true"] { background: var(--accent); border-color: var(--accent); color: #fff; }
+
+    .sugg {
+      position: absolute; left: 0; right: 0; top: calc(100% + 8px); z-index: 5;
+      list-style: none; margin: 0; padding: 6px; text-align: left;
+      background: var(--card); border: 1px solid var(--border);
+      border-radius: 16px; box-shadow: var(--shadow);
+    }
+    .sugg a { display: flex; justify-content: space-between; gap: 12px; padding: 10px 12px; border-radius: 10px; }
+    .sugg a:active, .sugg a:hover { background: var(--chip); }
+    .sugg small { color: var(--muted); white-space: nowrap; }
+
+    h2 { margin: 30px 0 12px; font-size: 13px; text-transform: uppercase; letter-spacing: .08em; color: var(--muted); }
+    .grid { list-style: none; margin: 0; padding: 0; display: grid; gap: 14px; grid-template-columns: repeat(auto-fill, minmax(260px, 1fr)); }
+    .book {
+      display: grid; grid-template-columns: 64px 1fr; gap: 4px 14px; align-items: start;
+      padding: 16px; height: 100%;
+      background: var(--card); border: 1px solid var(--border);
+      border-radius: 20px; box-shadow: var(--shadow);
+      transition: transform .12s ease;
+    }
+    .book:active { transform: scale(.98); }
+    .cover {
+      grid-row: 1 / span 2; width: 64px; height: 64px; border-radius: 16px;
+      background: var(--chip); object-fit: contain; padding: 6px;
+    }
+    .book h3 { margin: 2px 0 0; font-size: 17px; line-height: 1.25; }
+    .book p {
+      margin: 0; color: var(--muted); font-size: 13px;
+      display: -webkit-box; -webkit-line-clamp: 2; -webkit-box-orient: vertical; overflow: hidden;
+    }
+    .chips { grid-column: 1 / -1; display: flex; flex-wrap: wrap; gap: 6px; margin-top: 10px; }
+    .chip { background: var(--chip); color: var(--muted); border-radius: 999px; padding: 3px 10px; font-size: 12px; font-weight: 600; }
+
+    .skeleton { height: 128px; border-radius: 20px; background: var(--chip); opacity: .6; animation: pulse 1.2s ease-in-out infinite; }
+    @keyframes pulse { 50% { opacity: .3; } }
+
+    .empty { text-align: center; padding: 36px 16px; background: var(--card); border: 1px dashed var(--border); border-radius: 20px; }
+    .empty p { margin: 0 0 14px; color: var(--muted); }
+    .cta {
+      display: inline-block; padding: 12px 20px; border-radius: 14px; color: #fff; font-weight: 600;
+      background: linear-gradient(135deg, var(--accent), var(--accent-2));
+    }
+
+    footer { margin-top: 34px; text-align: center; color: var(--muted); font-size: 12px; }
+    footer a { text-decoration: underline; }
+  </style>
+</head>
+<body>
+  <div class="wrap">
+    <div class="top">
+      <a class="manage" href="../">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M15 18l-6-6 6-6"/></svg>
+        <span data-t="manage"></span>
+      </a>
+    </div>
+
+    <section class="hero">
+      <div class="logo">
+        <svg viewBox="0 0 24 24" fill="currentColor"><path d="M19 2l-5 4.5v11l5-4.5V2M6.5 5C4.55 5 2.45 5.4 1 6.5v14.66c0 .25.25.5.5.5.1 0 .15-.07.25-.07C3.1 20.94 5.05 20.5 6.5 20.5c1.95 0 4.05.4 5.5 1.5 1.35-.85 3.8-1.5 5.5-1.5 1.65 0 3.35.31 4.75 1.06.1.05.15.03.25.03.25 0 .5-.25.5-.5V6.5c-.6-.45-1.25-.75-2-1V19c-1.1-.35-2.3-.5-3.5-.5-1.7 0-4.15.65-5.5 1.5V6.5C10.55 5.4 8.45 5 6.5 5z"/></svg>
+      </div>
+      <h1>Kiwix</h1>
+      <p class="sub" id="sub"></p>
+
+      <div class="search" id="searchbox" hidden>
+        <form id="form" autocomplete="off">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><circle cx="11" cy="11" r="7"/><path d="M20 20l-3.5-3.5"/></svg>
+          <input id="q" type="search" enterkeyhint="search" autocapitalize="none" spellcheck="false">
+          <button type="submit" data-t="search"></button>
+        </form>
+        <ul class="sugg" id="sugg" hidden></ul>
+      </div>
+      <div class="scopes" id="scopes"></div>
+    </section>
+
+    <h2 data-t="library"></h2>
+    <ul class="grid" id="grid"><li class="skeleton"></li><li class="skeleton"></li></ul>
+
+    <footer><span data-t="powered"></span> <a href="https://kiwix.org" target="_blank" rel="noopener">Kiwix</a></footer>
+  </div>
+
+<script>
+(() => {
+  const lang = (navigator.language || "en").toLowerCase().startsWith("da") ? "da" : "en";
+  const T = {
+    da: {
+      manage: "Administrer indhold", search: "Søg", library: "Dit bibliotek",
+      placeholder: "Søg i alt dit indhold", all: "Alt",
+      articles: "artikler", books1: "1 bog", booksN: "bøger", sub0: "Intet indhold endnu",
+      emptyText: "Du har ikke hentet noget endnu.", emptyCta: "Hent indhold",
+      error: "Kunne ikke læse biblioteket.", retry: "Prøv igen", powered: "Drevet af",
+      fullText: "Søg efter", offline: "Virker uden internet",
+    },
+    en: {
+      manage: "Manage content", search: "Search", library: "Your library",
+      placeholder: "Search all your content", all: "All",
+      articles: "articles", books1: "1 book", booksN: "books", sub0: "No content yet",
+      emptyText: "You haven't downloaded anything yet.", emptyCta: "Get content",
+      error: "Could not read the library.", retry: "Retry", powered: "Powered by",
+      fullText: "Search for", offline: "Works offline",
+    },
+  }[lang];
+  document.documentElement.lang = lang;
+  document.querySelectorAll("[data-t]").forEach((el) => { el.textContent = T[el.dataset.t]; });
+  document.getElementById("q").placeholder = T.placeholder;
+
+  const $ = (id) => document.getElementById(id);
+  const nf = new Intl.NumberFormat(lang === "da" ? "da-DK" : "en-US");
+  const child = (el, name) => Array.from(el.children).find((c) => c.localName === name);
+  const text = (el, name) => (child(el, name)?.textContent || "").trim();
+  const fmtSize = (b) => {
+    if (!b) return "";
+    const u = ["B", "KB", "MB", "GB", "TB"]; let i = 0;
+    while (b >= 1024 && i < u.length - 1) { b /= 1024; i++; }
+    return `${nf.format(Math.round(b * (i > 1 ? 10 : 1)) / (i > 1 ? 10 : 1))} ${u[i]}`;
+  };
+  const langName = (code) => {
+    try { const n = new Intl.DisplayNames([lang], { type: "language" }).of(code) || code; return n.charAt(0).toUpperCase() + n.slice(1); }
+    catch (e) { return code; }
+  };
+
+  let books = [];
+  let scope = null; // null = all books, otherwise a book name
+
+  async function load() {
+    try {
+      const [feed, state] = await Promise.all([
+        fetch("catalog/v2/entries?count=200").then((r) => { if (!r.ok) throw new Error(r.status); return r.text(); }),
+        fetch("../api/state").then((r) => (r.ok ? r.json() : null)).catch(() => null),
+      ]);
+      const doc = new DOMParser().parseFromString(feed, "text/xml");
+      const files = state ? state.library : [];
+      books = Array.from(doc.getElementsByTagName("entry")).map((entry) => {
+        const name = text(entry, "name");
+        const icon = Array.from(entry.children).find((c) => c.localName === "link" && (c.getAttribute("rel") || "").includes("image"));
+        const file = files.find((f) => name && f.file.startsWith(name));
+        return {
+          name,
+          title: text(entry, "title"),
+          desc: text(entry, "summary") || text(entry, "content"),
+          lang: text(entry, "language"),
+          articles: parseInt(text(entry, "articleCount"), 10) || 0,
+          icon: icon ? icon.getAttribute("href").replace("size=48", "size=96") : "",
+          size: file ? file.size : 0,
+        };
+      }).filter((b) => b.name);
+      render();
+    } catch (e) {
+      $("sub").textContent = T.error;
+      $("grid").innerHTML = "";
+      const li = document.createElement("li");
+      li.className = "empty";
+      const btn = document.createElement("a");
+      btn.className = "cta"; btn.href = "#"; btn.textContent = T.retry;
+      btn.onclick = (ev) => { ev.preventDefault(); location.reload(); };
+      li.appendChild(btn);
+      $("grid").appendChild(li);
+    }
+  }
+
+  function render() {
+    const total = books.reduce((n, b) => n + b.articles, 0);
+    $("sub").textContent = books.length
+      ? `${books.length === 1 ? T.books1 : `${books.length} ${T.booksN}`} · ${nf.format(total)} ${T.articles} · ${T.offline}`
+      : T.sub0;
+    $("searchbox").hidden = books.length === 0;
+
+    const grid = $("grid");
+    grid.innerHTML = "";
+    if (!books.length) {
+      const li = document.createElement("li");
+      li.className = "empty";
+      const p = document.createElement("p"); p.textContent = T.emptyText;
+      const a = document.createElement("a"); a.className = "cta"; a.href = "../"; a.textContent = T.emptyCta;
+      li.append(p, a); grid.appendChild(li);
+    }
+    for (const b of books) {
+      const li = document.createElement("li");
+      const a = document.createElement("a");
+      a.className = "book";
+      a.href = `viewer#${encodeURIComponent(b.name)}`;
+      const img = document.createElement("img");
+      img.className = "cover"; img.alt = ""; img.loading = "lazy";
+      if (b.icon) img.src = b.icon;
+      const h = document.createElement("h3"); h.textContent = b.title || b.name;
+      const p = document.createElement("p"); p.textContent = b.desc;
+      const chips = document.createElement("div"); chips.className = "chips";
+      for (const label of [b.lang && langName(b.lang), b.articles && `${nf.format(b.articles)} ${T.articles}`, fmtSize(b.size)]) {
+        if (!label) continue;
+        const c = document.createElement("span"); c.className = "chip"; c.textContent = label; chips.appendChild(c);
+      }
+      const head = document.createElement("div"); head.append(h, p);
+      a.append(img, head, chips);
+      li.appendChild(a); grid.appendChild(li);
+    }
+
+    const scopes = $("scopes");
+    scopes.innerHTML = "";
+    if (books.length > 1) {
+      for (const b of [{ name: null, title: T.all }, ...books]) {
+        const s = document.createElement("button");
+        s.type = "button"; s.className = "scope"; s.textContent = b.title;
+        s.setAttribute("aria-pressed", String(scope === b.name));
+        s.onclick = () => { scope = b.name; render(); suggest(); };
+        scopes.appendChild(s);
+      }
+    }
+  }
+
+  const scoped = () => (scope ? books.filter((b) => b.name === scope) : books);
+
+  $("form").addEventListener("submit", (ev) => {
+    ev.preventDefault();
+    const q = $("q").value.trim();
+    if (!q) return;
+    const sel = scoped();
+    const params = new URLSearchParams();
+    if (sel.length === 1) params.set("content", sel[0].name);
+    else sel.forEach((b) => params.append("books.name", b.name));
+    params.set("pattern", q);
+    location.href = `search?${params}`;
+  });
+
+  let timer = 0, seq = 0;
+  function suggest() {
+    clearTimeout(timer);
+    timer = setTimeout(async () => {
+      const q = $("q").value.trim();
+      const box = $("sugg");
+      const mine = ++seq;
+      if (q.length < 2) { box.hidden = true; return; }
+      const lists = await Promise.all(scoped().map((b) =>
+        fetch(`suggest?content=${encodeURIComponent(b.name)}&term=${encodeURIComponent(q)}&count=5`)
+          .then((r) => (r.ok ? r.json() : [])).catch(() => [])
+          .then((items) => items.filter((i) => i.path).map((i) => ({ book: b, item: i })))));
+      if (mine !== seq) return;
+      const hits = lists.flat().slice(0, 7);
+      box.innerHTML = "";
+      for (const { book, item } of hits) {
+        const li = document.createElement("li");
+        const a = document.createElement("a");
+        a.href = `viewer#${encodeURIComponent(book.name)}/${item.path.split("/").map(encodeURIComponent).join("/")}`;
+        const t = document.createElement("span"); t.textContent = item.label || item.value;
+        a.appendChild(t);
+        if (books.length > 1) { const s = document.createElement("small"); s.textContent = book.title; a.appendChild(s); }
+        li.appendChild(a); box.appendChild(li);
+      }
+      box.hidden = hits.length === 0;
+    }, 160);
+  }
+  $("q").addEventListener("input", suggest);
+  document.addEventListener("click", (ev) => { if (!ev.target.closest(".search")) $("sugg").hidden = true; });
+
+  load();
+})();
+</script>
+</body>
+</html>

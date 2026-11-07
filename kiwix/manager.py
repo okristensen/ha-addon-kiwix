@@ -215,10 +215,10 @@ def is_allowed_download_url(url):
 
 
 def add_back_link(html, accept_language, ingress_path):
-    """Insert a floating link back to the manager page into the reader home page."""
-    label = "\u2190 Administrer indhold" if accept_language.lower().startswith("da") else "\u2190 Manage content"
+    """Insert a floating link back to the front page into a search result page."""
+    label = "\u2190 Forside" if accept_language.lower().startswith("da") else "\u2190 Home"
     link = (
-        f'<a href="{ingress_path}/" style="position:fixed;left:12px;'
+        f'<a href="{ingress_path}/reader/" style="position:fixed;left:12px;'
         "bottom:10px;z-index:2147483647;"
         "padding:8px 14px;border-radius:999px;background:#03a9f4;color:#fff;"
         "font:600 14px system-ui,sans-serif;text-decoration:none;"
@@ -536,7 +536,10 @@ class Handler(BaseHTTPRequestHandler):
             self.send_header("Location", "reader/")
             self.send_header("Content-Length", "0")
             self.end_headers()
-        elif route == "/reader" or route.startswith("/reader/"):
+        elif route == "/reader":
+            # The reader's own front page is replaced by ours (web/home.html).
+            self._send(200, (WEB_DIR / "home.html").read_bytes(), "text/html; charset=utf-8")
+        elif route.startswith("/reader/"):
             self._proxy_reader()
         elif route == "/api/state":
             self._json(200, library_state())
@@ -589,14 +592,14 @@ class Handler(BaseHTTPRequestHandler):
         try:
             connection.request("GET", upstream_path, headers=headers)
             upstream = connection.getresponse()
-            # Only the reader's home page gets a link back to the manager;
-            # everywhere else the reader's own navigation is enough.
+            # Search result pages have no way back to the front page, so they
+            # get a link; the article viewer has its own toolbar.
             body = None
             if (
                 upstream.status == 200
                 and upstream.getheader("Content-Type", "").startswith("text/html")
                 and not upstream.getheader("Content-Encoding")
-                and self.path.split("?", 1)[0].rstrip("/") == "/reader"
+                and self.path.split("?", 1)[0].rstrip("/") == "/reader/search"
             ):
                 body = add_back_link(
                     upstream.read(),

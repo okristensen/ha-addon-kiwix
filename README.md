@@ -19,6 +19,8 @@ built-in web page, and the app downloads it and serves it on your local network.
 - Management page and reader both open inside Home Assistant (ingress), so they
   work in the mobile app and through Home Assistant Cloud; the reader is also
   available directly on port 8080
+- A front page for the reader with your library as cards, one search across all
+  books with suggestions, and a button to the management page
 - Danish and English interface, light and dark mode
 
 ## Installation

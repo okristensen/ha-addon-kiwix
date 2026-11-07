@@ -1,5 +1,13 @@
 # Changelog
 
+## 1.3.0
+
+- New front page for the reader: your library as large cards with cover, language, article
+  count and size, one search box across all books with suggestions while typing, and a
+  "Manage content" button. Works offline and follows light/dark mode and the browser language.
+- Search result pages get a small "Home" link back to the front page; the old floating link on
+  the reader home page is gone.
+
 ## 1.2.3
 
 - Let non-admin Home Assistant users open the app (`panel_admin: false`), so it can be used
