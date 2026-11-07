@@ -32,6 +32,37 @@ built-in web page, and the app downloads it and serves it on your local network.
 
 Supported architectures: `aarch64`, `amd64`.
 
+## Dashboard card
+
+The app publishes the library as `sensor.kiwix_library`: the state is the number of
+ZIM files, and the attributes list the files (`name`, `file`, `date`, `size_gb`),
+`total_size_gb`, `free_space_gb`, `reader_running` and running `downloads`. Add a
+**Markdown** card to a dashboard to show it:
+
+```yaml
+type: markdown
+title: Kiwix
+content: |-
+  {% set e = 'sensor.kiwix_library' %}
+  {% if states(e) in ['unknown', 'unavailable'] %}
+  Kiwix is not running.
+  {% else %}
+  {% for f in state_attr(e, 'files') -%}
+  - **{{ f.name }}** · {{ f.date }} · {{ f.size_gb }} GB
+  {% endfor -%}
+  {% for d in state_attr(e, 'downloads') -%}
+  - ⬇️ {{ d.file }} · {{ d.percent }} %
+  {% endfor %}
+  {{ state_attr(e, 'total_size_gb') }} GB in total · {{ state_attr(e, 'free_space_gb') }} GB free
+
+  [Open Kiwix](/hassio/ingress/<app slug>)
+  {% endif %}
+```
+
+Replace `<app slug>` with the app's slug (shown in the address when you open the app
+in Settings → Apps, e.g. `e074bf37_kiwix`). The sensor is re-published every minute,
+so it comes back by itself after Home Assistant restarts.
+
 ## Notes
 
 - ZIM files are stored in `/share/kiwix`, so they survive app updates and can be

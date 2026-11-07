@@ -15,6 +15,11 @@
 Downloaded files live in `/share/kiwix` (available through the Samba share).
 Partial downloads are kept as `.part` files and resumed if the app restarts.
 
+## Dashboards
+
+The library is published as `sensor.kiwix_library` (see the repository README for a
+ready-made Markdown card).
+
 ## Updating content
 
 Kiwix publishes new versions of its files regularly. Download the newer file from
