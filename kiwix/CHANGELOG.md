@@ -1,5 +1,9 @@
 # Changelog
 
+## 1.7.3
+
+- The app now uses orange (logo, buttons, chips and focus colour) to match its icon in the family apps, instead of blue.
+
 ## 1.7.2
 
 - The app is now called "Opslag" everywhere it is shown (app name, sidebar panel, page titles and headings). The Kiwix catalog is still called Kiwix.
