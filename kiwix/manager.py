@@ -263,6 +263,31 @@ def add_back_link(html, accept_language, ingress_path):
     return html[:index] + bar + html[index:]
 
 
+def add_home_button(html, accept_language, ingress_path):
+    """Add a floating "front page" button to an article opened outside the viewer.
+
+    Articles opened from search results have no toolbar. Inside the viewer the
+    article sits in an iframe under the viewer's own toolbar, so there the
+    button stays hidden (decided in the browser by looking at the parent page).
+    """
+    label = "\u2190 Forside" if accept_language.lower().startswith("da") else "\u2190 Home"
+    snippet = (
+        '<a id="kiwix-home-btn" href="' + ingress_path + '/reader/" style="display:none;position:fixed;left:12px;'
+        "bottom:calc(12px + env(safe-area-inset-bottom));z-index:2147483647;align-items:center;"
+        "padding:10px 18px;border-radius:999px;color:#fff;text-decoration:none;"
+        "font:600 15px system-ui,sans-serif;background:linear-gradient(135deg,#0a8ee8,#5b6cf0);"
+        'box-shadow:0 4px 14px rgba(0,0,0,.3)">' + label + "</a>"
+        "<script>(function(){var inViewer=false;"
+        "try{inViewer=parent!==window&&/\\/reader\\/viewer/.test(parent.location.pathname)}catch(e){}"
+        'if(!inViewer){document.getElementById("kiwix-home-btn").style.display="inline-flex";'
+        'document.body.style.paddingBottom="calc(76px + env(safe-area-inset-bottom))"}})();</script>'
+    ).encode()
+    index = html.lower().rfind(b"</body>")
+    if index == -1:
+        return html + snippet
+    return html[:index] + snippet + html[index:]
+
+
 def parse_catalog(xml_bytes):
     """Parse a Kiwix OPDS feed into ``(total_results, entries)``."""
     root = ET.fromstring(xml_bytes)
@@ -803,16 +828,22 @@ class Handler(BaseHTTPRequestHandler):
         try:
             connection.request("GET", upstream_path, headers=headers)
             upstream = connection.getresponse()
-            # Search result pages have no way back to the front page, so they
-            # get a link; the article viewer has its own toolbar.
+            # Search result pages and articles opened on their own have no way
+            # back to the front page, so they get one; the viewer has a toolbar.
             body = None
+            page = self.path.split("?", 1)[0]
+            decorate = None
+            if page.rstrip("/") == "/reader/search":
+                decorate = add_back_link
+            elif page.startswith("/reader/content/"):
+                decorate = add_home_button
             if (
-                upstream.status == 200
+                decorate
+                and upstream.status == 200
                 and upstream.getheader("Content-Type", "").startswith("text/html")
                 and not upstream.getheader("Content-Encoding")
-                and self.path.split("?", 1)[0].rstrip("/") == "/reader/search"
             ):
-                body = add_back_link(
+                body = decorate(
                     upstream.read(),
                     self.headers.get("Accept-Language", ""),
                     ingress_path,

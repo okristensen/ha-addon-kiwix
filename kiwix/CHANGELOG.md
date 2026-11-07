@@ -1,5 +1,10 @@
 # Changelog
 
+## 1.5.1
+
+- Articles opened on their own (for example from search results) get a "Home" button at the bottom left.
+  Inside the viewer it stays hidden, because the viewer has its own toolbar.
+
 ## 1.5.0
 
 - Search result pages are styled like the front page (cards, chips, light/dark) and the "Home" link is
