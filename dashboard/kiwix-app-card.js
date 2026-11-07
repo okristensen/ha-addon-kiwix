@@ -22,6 +22,7 @@ class KiwixAppCard extends HTMLElement {
     this._hass = null;
     this._started = false;
     this._timer = null;
+    this._onResize = () => this._fit();
   }
 
   setConfig(config) {
@@ -42,6 +43,7 @@ class KiwixAppCard extends HTMLElement {
 
   disconnectedCallback() {
     clearInterval(this._timer);
+    window.removeEventListener("resize", this._onResize);
     this._started = false;
   }
 
@@ -80,9 +82,21 @@ class KiwixAppCard extends HTMLElement {
       }, 5 * 60 * 1000);
 
       this._render(`<iframe src="${info.ingress_url}" allow="fullscreen"></iframe>`);
+      window.addEventListener("resize", this._onResize);
+      requestAnimationFrame(() => this._fit());
+      setTimeout(() => this._fit(), 500);
     } catch (error) {
       this._render(`<p class="error">Could not open Kiwix: ${error.message || error}</p>`);
     }
+  }
+
+  // Fill exactly the space below the dashboard header, so the page never scrolls
+  // and the top of the reader stays visible.
+  _fit() {
+    const frame = this.shadowRoot.querySelector("iframe");
+    if (!frame) return;
+    const top = Math.max(this.getBoundingClientRect().top, 0);
+    frame.style.height = `${Math.max(Math.floor(window.innerHeight - top), 200)}px`;
   }
 
   _setCookie(session) {
@@ -93,11 +107,11 @@ class KiwixAppCard extends HTMLElement {
   _render(body) {
     this.shadowRoot.innerHTML = `
       <style>
-        :host { display: block; }
+        :host { display: block; overflow: hidden; }
         iframe {
           display: block;
           width: 100%;
-          height: calc(100vh - var(--header-height, 56px));
+          height: calc(100vh - var(--header-height, 56px) - env(safe-area-inset-top, 0px));
           border: 0;
           background: var(--primary-background-color);
         }
