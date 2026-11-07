@@ -1,5 +1,10 @@
 # Changelog
 
+## 1.2.3
+
+- Let non-admin Home Assistant users open the app (`panel_admin: false`), so it can be used
+  as a family app. Everyone who can open it can also manage and delete content.
+
 ## 1.2.2
 
 - Move the "Manage content" link closer to the bottom edge so it no longer covers the footer.
