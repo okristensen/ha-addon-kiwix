@@ -96,7 +96,12 @@ class KiwixAppCard extends HTMLElement {
     const frame = this.shadowRoot.querySelector("iframe");
     if (!frame) return;
     const top = Math.max(this.getBoundingClientRect().top, 0);
-    frame.style.height = `${Math.max(Math.floor(window.innerHeight - top), 200)}px`;
+    const probe = document.createElement("div");
+    probe.style.cssText = "position:fixed;visibility:hidden;padding-bottom:env(safe-area-inset-bottom,0px)";
+    document.body.appendChild(probe);
+    const bottom = parseFloat(getComputedStyle(probe).paddingBottom) || 0;
+    probe.remove();
+    frame.style.height = `${Math.max(Math.floor(window.innerHeight - top - bottom), 200)}px`;
   }
 
   _setCookie(session) {
