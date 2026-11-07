@@ -118,23 +118,48 @@ class KiwixAppCard extends HTMLElement {
         /* not readable: treat as another page */
       }
       box.hidden = !/\/reader\/?$/.test(path);
+      watchBody();
       this._fit();
     };
-    // The card sits under the reader, so the reader gives up that much height
-    // (the page itself never scrolls, so the card would otherwise be out of reach).
+    // On the front page the reader is as tall as its content and this card
+    // scrolls, so "Flere apps" ends up at the very bottom of the page.
     if (window.ResizeObserver) new ResizeObserver(() => this._fit()).observe(box);
+    const watchBody = () => {
+      if (this._bodyObserver) this._bodyObserver.disconnect();
+      try {
+        if (window.ResizeObserver) {
+          this._bodyObserver = new ResizeObserver(() => this._fit());
+          this._bodyObserver.observe(frame.contentDocument.body);
+        }
+      } catch (error) {
+        /* not readable */
+      }
+    };
     frame.addEventListener("load", check);
     check();
   }
 
-  // Fill exactly the space below the dashboard header, so the page never scrolls
-  // and the top of the reader stays visible.
+  // Fill exactly the space below the dashboard header. The card itself scrolls
+  // (the dashboard page does not): on the front page the reader takes the height
+  // of its content with "Flere apps" underneath, elsewhere it fills the space.
   _fit() {
     const frame = this.shadowRoot.querySelector("iframe");
     if (!frame) return;
     const top = Math.max(this.getBoundingClientRect().top, 0);
-    const extra = this._box && !this._box.hidden ? Math.ceil(this._box.getBoundingClientRect().height) : 0;
-    frame.style.height = `${Math.max(Math.floor(window.innerHeight - top - extra), 200)}px`;
+    const avail = Math.max(Math.floor(window.innerHeight - top), 200);
+    this.style.height = `${avail}px`;
+    const front = this._box && !this._box.hidden;
+    let height = avail;
+    if (front) {
+      let content = 0;
+      try {
+        content = frame.contentDocument.body.offsetHeight;
+      } catch (error) {
+        /* not readable */
+      }
+      height = Math.max(content, avail - Math.ceil(this._box.getBoundingClientRect().height));
+    }
+    frame.style.height = `${height}px`;
   }
 
   _setCookie(session) {
@@ -145,7 +170,7 @@ class KiwixAppCard extends HTMLElement {
   _render(body) {
     this.shadowRoot.innerHTML = `
       <style>
-        :host { display: block; overflow: hidden; }
+        :host { display: block; overflow-x: hidden; overflow-y: auto; -webkit-overflow-scrolling: touch; }
         iframe {
           display: block;
           width: 100%;
