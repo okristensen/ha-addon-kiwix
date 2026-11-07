@@ -1,5 +1,5 @@
 name: Kiwix
-version: "1.5.4"
+version: "1.5.5"
 slug: kiwix
 description: Offline Wikipedia and other content, browsed and downloaded from the Kiwix catalog
 url: https://github.com/okristensen/ha-addon-kiwix

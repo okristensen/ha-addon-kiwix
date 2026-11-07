@@ -1,5 +1,11 @@
 # Changelog
 
+## 1.5.5
+
+- Kiwix cannot search books in different languages at once ("Two or more books in different languages").
+  With mixed languages the front page now offers one "All · <language>" chip per language (your own
+  language first) plus each book, instead of one "All" chip.
+
 ## 1.5.4
 
 - Searching across all books works again ("No such book" fixed): books are addressed by their library id.

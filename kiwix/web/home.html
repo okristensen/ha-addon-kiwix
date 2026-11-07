@@ -292,9 +292,26 @@
     const scopes = $("scopes");
     scopes.innerHTML = "";
     if (books.length > 1) {
-      for (const b of [{ name: null, title: T.all }, ...books]) {
+      const ls = langs();
+      let options;
+      if (ls.length <= 1) {
+        options = [{ name: null, title: T.all }, ...books];
+      } else {
+        options = [];
+        for (const l of ls) {
+          if (books.filter((b) => (b.lang || "") === l).length > 1) {
+            options.push({ name: `lang:${l}`, title: `${T.all} · ${l ? langName(l) : "?"}` });
+          }
+        }
+        options.push(...books);
+        if (!options.some((o) => o.name === scope)) {
+          const own = options.find((o) => o.name && o.name.startsWith("lang:") && o.name.slice(5, 7) === lang);
+          scope = (own || options[0]).name;
+        }
+      }
+      for (const b of options) {
+        const twin = b.name && !b.name.startsWith("lang:") && books.some((o) => o !== b && o.title === b.title);
         const s = document.createElement("button");
-        const twin = b.name && books.some((o) => o !== b && o.title === b.title);
         s.type = "button"; s.className = "scope";
         s.textContent = twin && b.lang ? `${b.title} · ${langName(b.lang)}` : b.title;
         s.setAttribute("aria-pressed", String(scope === b.name));
@@ -304,7 +321,13 @@
     }
   }
 
-  const scoped = () => (scope ? books.filter((b) => b.name === scope) : books);
+  // Kiwix refuses a search across books in different languages, so with mixed
+  // languages "all" means all books in one language (scope "lang:xx").
+  const langs = () => [...new Set(books.map((b) => b.lang || ""))];
+  const scoped = () => {
+    if (scope && scope.startsWith("lang:")) return books.filter((b) => (b.lang || "") === scope.slice(5));
+    return scope ? books.filter((b) => b.name === scope) : books;
+  };
 
   $("form").addEventListener("submit", (ev) => {
     ev.preventDefault();
