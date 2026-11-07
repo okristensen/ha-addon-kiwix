@@ -32,6 +32,7 @@ from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 from pathlib import Path
 
 LIBRARY_DIR = Path(os.environ.get("KIWIX_LIBRARY_DIR", "/share/kiwix"))
+QUEUE_FILE = LIBRARY_DIR / ".downloads.json"
 CATALOG_URL = os.environ.get(
     "KIWIX_CATALOG_URL", "https://library.kiwix.org/catalog/v2/entries"
 )
@@ -315,6 +316,36 @@ class DownloadManager:
         with self._lock:
             return [job.to_dict() for job in self._jobs.values()]
 
+    def _save_locked(self):
+        """Remember unfinished downloads so they continue after a restart."""
+        pending = [
+            {"url": job.url, "size": job.total}
+            for job in self._jobs.values()
+            if job.status != "error" and not job.cancel.is_set()
+        ]
+        try:
+            if pending:
+                QUEUE_FILE.write_text(json.dumps(pending))
+            else:
+                QUEUE_FILE.unlink(missing_ok=True)
+        except OSError as error:
+            log(f"Could not save the download queue: {error}")
+
+    def resume(self):
+        """Restart downloads that were running when the app was stopped."""
+        try:
+            pending = json.loads(QUEUE_FILE.read_text())
+        except (OSError, ValueError):
+            return
+        for entry in pending if isinstance(pending, list) else []:
+            try:
+                self.start(str(entry.get("url", "")), _to_int(entry.get("size")))
+                log(f"Resuming download of {str(entry.get('url', '')).rsplit('/', 1)[-1]}")
+            except (ValueError, AttributeError) as error:
+                log(f"Not resuming a download: {error}")
+        with self._lock:
+            self._save_locked()
+
     def start(self, url, size):
         url = normalize_download_url(url)
         if not is_allowed_download_url(url):
@@ -331,6 +362,7 @@ class DownloadManager:
                 raise ValueError("Already downloading")
             job = Job(url, filename, size)
             self._jobs[filename] = job
+            self._save_locked()
         threading.Thread(target=self._run, args=(job,), daemon=True).start()
 
     def cancel(self, filename):
@@ -343,10 +375,12 @@ class DownloadManager:
                 del self._jobs[filename]
             else:
                 job.cancel.set()
+            self._save_locked()
 
     def _finish(self, job):
         with self._lock:
             self._jobs.pop(job.file, None)
+            self._save_locked()
         publish_sensor()
 
     def _run(self, job):
@@ -363,6 +397,8 @@ class DownloadManager:
                 job.status = "error"
                 job.error = str(error)
                 log(f"Download of {job.file} failed: {error}")
+                with self._lock:
+                    self._save_locked()
                 publish_sensor()
                 return
         if job.cancel.is_set():
@@ -686,6 +722,7 @@ def main():
     signal.signal(signal.SIGINT, shutdown)
 
     restart_servers()
+    downloads.resume()
     threading.Thread(target=watchdog, daemon=True).start()
 
     log(f"Manager listening on port {MANAGER_PORT}, library in {LIBRARY_DIR}")

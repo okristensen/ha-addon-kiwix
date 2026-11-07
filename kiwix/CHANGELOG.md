@@ -1,5 +1,10 @@
 # Changelog
 
+## 1.3.2
+
+- Downloads now continue by themselves after the app is restarted or updated. Unfinished downloads
+  are remembered in `.downloads.json` in the library folder and resumed from the partial file.
+
 ## 1.3.1
 
 - Front page: fix broken cover images (falls back to the size the catalog lists) and remove the
