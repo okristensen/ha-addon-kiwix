@@ -1,5 +1,9 @@
 # Changelog
 
+## 1.2.2
+
+- Move the "Manage content" link closer to the bottom edge so it no longer covers the footer.
+
 ## 1.2.1
 
 - The link back to the manager is now labelled "Manage content", sits at the bottom left and

@@ -219,7 +219,7 @@ def add_back_link(html, accept_language, ingress_path):
     label = "\u2190 Administrer indhold" if accept_language.lower().startswith("da") else "\u2190 Manage content"
     link = (
         f'<a href="{ingress_path}/" style="position:fixed;left:12px;'
-        "bottom:calc(12px + env(safe-area-inset-bottom));z-index:2147483647;"
+        "bottom:10px;z-index:2147483647;"
         "padding:8px 14px;border-radius:999px;background:#03a9f4;color:#fff;"
         "font:600 14px system-ui,sans-serif;text-decoration:none;"
         f'box-shadow:0 2px 8px rgba(0,0,0,.3)">{label}</a>'
