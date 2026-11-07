@@ -37,6 +37,9 @@ h1 { margin: 0; font-size: 28px; }
 h2 { margin: 32px 0 12px; font-size: 18px; }
 .muted { color: var(--muted); margin: 4px 0 0; }
 
+.header-actions { display: flex; flex-direction: column; align-items: flex-end; gap: 6px; }
+.small-link { color: var(--muted); font-size: 12px; }
+
 .list { list-style: none; margin: 0; padding: 0; display: grid; gap: 10px; }
 .item {
   display: grid;

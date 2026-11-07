@@ -16,8 +16,9 @@ built-in web page, and the app downloads it and serves it on your local network.
 - Library view with sizes and free disk space; delete what you no longer need
 - Serves everything with the official `kiwix-serve`, restarted automatically when
   the library changes
-- Appears in the Home Assistant sidebar (ingress); the reader itself runs on
-  port 8080
+- Management page and reader both open inside Home Assistant (ingress), so they
+  work in the mobile app and through Home Assistant Cloud; the reader is also
+  available directly on port 8080
 - Danish and English interface, light and dark mode
 
 ## Installation
@@ -27,7 +28,7 @@ built-in web page, and the app downloads it and serves it on your local network.
 2. Install **Kiwix** and start it.
 3. Open **Kiwix** in the sidebar, pick a ZIM file from the catalog and press
    **Download**.
-4. Press **Open Kiwix** to read, or browse to `http://<home-assistant>:8080`.
+4. Press **Open Kiwix** to read, or browse directly to `http://<home-assistant>:8080`.
 
 Supported architectures: `aarch64`, `amd64`.
 
@@ -36,8 +37,8 @@ Supported architectures: `aarch64`, `amd64`.
 - ZIM files are stored in `/share/kiwix`, so they survive app updates and can be
   reached through the Samba share. Check the size shown in the catalog before
   downloading: a full English Wikipedia with images is well over 100 GB.
-- The reader on port 8080 is plain HTTP on your local network. Remote access
-  through Home Assistant Cloud only covers the management page in the sidebar.
+- Port 8080 is plain HTTP on your local network. Inside Home Assistant the reader
+  is served through ingress, which also works remotely.
 - Filenames follow the Kiwix convention (`name_YYYY-MM.zim`). To update a ZIM,
   download the newer version and delete the old one.
 

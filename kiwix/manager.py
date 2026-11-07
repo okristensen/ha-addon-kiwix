@@ -1,15 +1,18 @@
 #!/usr/bin/env python3
 """Kiwix app manager for Home Assistant.
 
-Runs three things in one small process (standard library only):
+Runs four things in one small process (standard library only):
 
 * a supervisor that keeps ``kiwix-serve`` running for every ZIM file in the
-  library directory and restarts it whenever the library changes,
+  library directory and restarts it whenever the library changes (one
+  instance on a published port, one behind Home Assistant ingress),
+* a reverse proxy that exposes the ingress instance as ``reader/``,
 * a client for the public Kiwix catalog (OPDS), and
 * a resumable download manager, exposed through a small web UI that is
   served via Home Assistant ingress.
 """
 
+import http.client
 import json
 import os
 import re
@@ -33,6 +36,7 @@ CATALOG_URL = os.environ.get(
 DOWNLOAD_HOST = os.environ.get("KIWIX_DOWNLOAD_HOST", "download.kiwix.org")
 KIWIX_SERVE = os.environ.get("KIWIX_SERVE_BIN", "/usr/local/bin/kiwix-serve")
 KIWIX_PORT = int(os.environ.get("KIWIX_PORT", "8080"))
+READER_PORT = int(os.environ.get("KIWIX_READER_PORT", "8081"))
 MANAGER_PORT = int(os.environ.get("MANAGER_PORT", "8099"))
 # Home Assistant's ingress gateway; only it (and localhost) may reach the UI.
 ALLOWED_CLIENTS = set(
@@ -42,6 +46,15 @@ USER_AGENT = "ha-addon-kiwix (+https://github.com/okristensen/ha-addon-kiwix)"
 WEB_DIR = Path(__file__).resolve().parent / "web"
 SPACE_MARGIN = 1 << 30  # always keep 1 GiB free
 FILENAME_RE = re.compile(r"[A-Za-z0-9][A-Za-z0-9._-]*\.zim")
+INGRESS_PATH_RE = re.compile(r"/api/hassio_ingress/[A-Za-z0-9_-]+")
+HOP_BY_HOP = {
+    "connection", "keep-alive", "transfer-encoding", "te", "trailer", "upgrade",
+    "proxy-authenticate", "proxy-authorization", "server", "date",
+}
+FORWARDED_HEADERS = {
+    "accept", "accept-language", "if-modified-since", "if-none-match", "range",
+    "referer", "user-agent",
+}
 
 STATIC_TYPES = {
     "index.html": "text/html; charset=utf-8",
@@ -58,12 +71,25 @@ def log(message):
 # kiwix-serve supervisor
 # --------------------------------------------------------------------------
 class KiwixServer:
-    """Keeps one kiwix-serve process running for all ZIM files."""
+    """Keeps one kiwix-serve process running for all ZIM files.
 
-    def __init__(self):
+    ``root`` is the URL prefix kiwix-serve generates links for. An instance
+    created with ``needs_root=True`` stays idle until a root has been set.
+    """
+
+    def __init__(self, name, port, needs_root=False):
+        self.name = name
+        self.port = port
+        self.root = None
+        self._needs_root = needs_root
         self._proc = None
         self._lock = threading.Lock()
         self._last_start = 0.0
+
+    def set_root(self, root):
+        if root != self.root:
+            self.root = root
+            self.restart()
 
     @staticmethod
     def zim_files():
@@ -86,7 +112,7 @@ class KiwixServer:
         """Watchdog: bring the server back if it died (at most every 30 s)."""
         with self._lock:
             if self._proc is not None and self._proc.poll() is not None:
-                log(f"kiwix-serve exited with code {self._proc.returncode}")
+                log(f"{self.name}: kiwix-serve exited with code {self._proc.returncode}")
                 self._proc = None
             if (
                 self._proc is None
@@ -96,15 +122,18 @@ class KiwixServer:
                 self._start()
 
     def _start(self):
+        if self._needs_root and not self.root:
+            return
         files = self.zim_files()
         self._last_start = time.monotonic()
         if not files:
-            log("No ZIM files yet - kiwix-serve not started")
+            log(f"{self.name}: no ZIM files yet - kiwix-serve not started")
             return
-        log(f"Starting kiwix-serve with {len(files)} ZIM file(s)")
-        self._proc = subprocess.Popen(
-            [KIWIX_SERVE, f"--port={KIWIX_PORT}", *map(str, files)]
-        )
+        command = [KIWIX_SERVE, f"--port={self.port}"]
+        if self.root:
+            command.append(f"--urlRootLocation={self.root}")
+        log(f"{self.name}: starting kiwix-serve with {len(files)} ZIM file(s)")
+        self._proc = subprocess.Popen([*command, *map(str, files)])
 
     def _stop(self):
         if self._proc is not None and self._proc.poll() is None:
@@ -117,7 +146,20 @@ class KiwixServer:
         self._proc = None
 
 
-kiwix = KiwixServer()
+kiwix = KiwixServer("direct", KIWIX_PORT)
+reader = KiwixServer("ingress", READER_PORT, needs_root=True)
+SERVERS = (kiwix, reader)
+
+
+def restart_servers():
+    for server in SERVERS:
+        server.restart()
+
+
+def note_ingress_path(path):
+    """Remember where Home Assistant mounts this app and serve the reader there."""
+    if path and INGRESS_PATH_RE.fullmatch(path):
+        reader.set_root(f"{path}/reader")
 
 
 # --------------------------------------------------------------------------
@@ -305,7 +347,7 @@ class DownloadManager:
         part.rename(LIBRARY_DIR / job.file)
         log(f"Downloaded {job.file}")
         self._finish(job)
-        kiwix.restart()
+        restart_servers()
 
     def _download(self, job, part):
         offset = part.stat().st_size if part.exists() else 0
@@ -352,6 +394,7 @@ def library_state():
         files.append({"file": path.name, "size": info.st_size, "mtime": int(info.st_mtime)})
     return {
         "running": kiwix.running,
+        "reader": reader.running,
         "port": KIWIX_PORT,
         "free": shutil.disk_usage(LIBRARY_DIR).free,
         "library": files,
@@ -394,9 +437,17 @@ class Handler(BaseHTTPRequestHandler):
     def do_GET(self):  # noqa: N802 - http.server naming
         if not self._guard():
             return
+        note_ingress_path(self.headers.get("X-Ingress-Path", ""))
         parsed = urllib.parse.urlparse(self.path)
         route = "/" + parsed.path.strip("/")
-        if route == "/api/state":
+        if route == "/reader" and not parsed.path.endswith("/"):
+            self.send_response(302)
+            self.send_header("Location", "reader/")
+            self.send_header("Content-Length", "0")
+            self.end_headers()
+        elif route == "/reader" or route.startswith("/reader/"):
+            self._proxy_reader()
+        elif route == "/api/state":
             self._json(200, library_state())
         elif route == "/api/catalog":
             self._catalog(urllib.parse.parse_qs(parsed.query))
@@ -427,6 +478,40 @@ class Handler(BaseHTTPRequestHandler):
             return
         self._json(200, {"ok": True})
 
+    def _proxy_reader(self):
+        """Forward a request to the ingress kiwix-serve instance."""
+        if not reader.running or not reader.root:
+            self._json(503, {"error": "The reader is not running yet"})
+            return
+        headers = {
+            key: value
+            for key, value in self.headers.items()
+            if key.lower() in FORWARDED_HEADERS
+        }
+        headers["Host"] = self.headers.get("Host", "")
+        # kiwix-serve is configured with the full ingress prefix as its root,
+        # so the prefix Home Assistant strips has to be added back.
+        upstream_path = reader.root.removesuffix("/reader") + self.path
+        connection = http.client.HTTPConnection("127.0.0.1", reader.port, timeout=60)
+        started = False
+        try:
+            connection.request("GET", upstream_path, headers=headers)
+            upstream = connection.getresponse()
+            self.send_response(upstream.status)
+            for key, value in upstream.getheaders():
+                if key.lower() not in HOP_BY_HOP:
+                    self.send_header(key, value)
+            self.end_headers()
+            started = True
+            while chunk := upstream.read(65536):
+                self.wfile.write(chunk)
+        except (OSError, http.client.HTTPException) as error:
+            log(f"Reader proxy error: {error}")
+            if not started:
+                self._json(502, {"error": "The reader did not respond"})
+        finally:
+            connection.close()
+
     def _catalog(self, query):
         def first(key):
             return query.get(key, [""])[0]
@@ -453,7 +538,7 @@ class Handler(BaseHTTPRequestHandler):
             raise ValueError("File not found")
         path.unlink()
         log(f"Deleted {filename}")
-        kiwix.restart()
+        restart_servers()
 
 
 # --------------------------------------------------------------------------
@@ -462,7 +547,8 @@ class Handler(BaseHTTPRequestHandler):
 def watchdog(interval=15):
     while True:
         time.sleep(interval)
-        kiwix.ensure_running()
+        for server in SERVERS:
+            server.ensure_running()
 
 
 def main():
@@ -471,13 +557,14 @@ def main():
 
     def shutdown(*_):
         log("Shutting down")
-        kiwix.stop()
+        for kiwix_server in SERVERS:
+            kiwix_server.stop()
         threading.Thread(target=server.shutdown, daemon=True).start()
 
     signal.signal(signal.SIGTERM, shutdown)
     signal.signal(signal.SIGINT, shutdown)
 
-    kiwix.restart()
+    restart_servers()
     threading.Thread(target=watchdog, daemon=True).start()
 
     log(f"Manager listening on port {MANAGER_PORT}, library in {LIBRARY_DIR}")

@@ -6,6 +6,7 @@ const STRINGS = {
     stopped: "Server stopped – download something to get started",
     free: "free",
     open: "Open Kiwix",
+    direct: "Direct link (port 8080)",
     downloading: "Downloading",
     library: "Your library",
     libraryEmpty: "Nothing installed yet. Pick something from the catalog below.",
@@ -32,6 +33,7 @@ const STRINGS = {
     stopped: "Serveren er stoppet – hent noget for at komme i gang",
     free: "ledig",
     open: "Åbn Kiwix",
+    direct: "Direkte link (port 8080)",
     downloading: "Henter",
     library: "Dit bibliotek",
     libraryEmpty: "Intet installeret endnu. Vælg noget i kataloget nedenfor.",
@@ -134,10 +136,19 @@ function renderState() {
   $("status").textContent =
     `${state.running ? t.running : t.stopped} · ${formatSize(state.free)} ${t.free}`;
 
+  // The reader opens inside Home Assistant when it is available through ingress;
+  // otherwise fall back to the published port.
+  const direct = `${location.protocol}//${location.hostname}:${state.port}/`;
   const open = $("open");
   open.hidden = !state.running;
   open.textContent = t.open;
-  open.href = `${location.protocol}//${location.hostname}:${state.port}/`;
+  open.href = state.reader ? "reader/" : direct;
+  open.target = state.reader ? "" : "_blank";
+
+  const link = $("direct");
+  link.hidden = !(state.running && state.reader);
+  link.textContent = t.direct;
+  link.href = direct;
 
   $("downloads-section").hidden = state.downloads.length === 0;
   $("downloads").replaceChildren(...state.downloads.map(renderDownload));

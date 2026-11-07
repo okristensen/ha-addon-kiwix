@@ -1,5 +1,10 @@
 # Changelog
 
+## 1.1.0
+
+- The reader now opens inside Home Assistant (served through ingress), so it works in the
+  mobile app and through Home Assistant Cloud. Port 8080 keeps working as a direct link.
+
 ## 1.0.2
 
 - Accept download links on Kiwix's load-balanced download hosts (`lb.download.kiwix.org`).

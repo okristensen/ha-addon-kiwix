@@ -7,7 +7,8 @@
    then press **Download** on the content you want (for example *Wikipedia,
    Danish, no images*).
 3. When the download finishes, the reader starts automatically. Press **Open
-   Kiwix** or go to `http://<home-assistant>:8080`.
+   Kiwix** to read inside Home Assistant, or use the direct link
+   (`http://<home-assistant>:8080`) to open it in a separate browser tab.
 
 ## Storage
 
@@ -21,5 +22,5 @@ the catalog and delete the old one from **Your library**.
 
 ## Configuration
 
-There are no options. The reader listens on port 8080; change the host port on the
+There are no options. The direct link uses port 8080; change the host port on the
 app's **Network** tab if it clashes with something else.
