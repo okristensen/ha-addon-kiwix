@@ -16,6 +16,7 @@ Runs five things in one small process (standard library only):
 
 import base64
 import http.client
+import ipaddress
 import json
 import os
 import re
@@ -768,7 +769,7 @@ class Handler(BaseHTTPRequestHandler):
         elif route == "/api/state":
             self._json(200, library_state())
         elif route == "/api/me":
-            self._json(200, {"admin": self._is_admin()})
+            self._json(200, {"admin": self._is_admin(), **self._network()})
         elif route == "/api/catalog":
             if self._is_admin():
                 self._catalog(urllib.parse.parse_qs(parsed.query))
@@ -809,6 +810,23 @@ class Handler(BaseHTTPRequestHandler):
             self._json(400, {"error": str(error)})
             return
         self._json(200, {"ok": True})
+
+    def _network(self):
+        """Tell whether the caller reached Home Assistant from the home network or the internet.
+
+        Ingress passes the caller's address on in X-Forwarded-For. A private
+        address means the home network; a public one means the internet (for
+        example Nabu Casa or a port forward). Loopback or no address says
+        nothing, so no verdict is given then.
+        """
+        raw = self.headers.get("X-Forwarded-For", "").split(",")[0].strip()
+        try:
+            address = ipaddress.ip_address(raw)
+        except ValueError:
+            return {"network": None, "client_ip": raw}
+        if address.is_loopback:
+            return {"network": None, "client_ip": raw}
+        return {"network": "local" if address.is_private else "remote", "client_ip": raw}
 
     def _proxy_reader(self):
         """Forward a request to the ingress kiwix-serve instance."""

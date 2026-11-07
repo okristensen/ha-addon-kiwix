@@ -1,5 +1,11 @@
 # Changelog
 
+## 1.6.0
+
+- The front page shows whether you reach Home Assistant from the home network or over the internet
+  (green "Lokalt netværk" / orange "Via nettet"). It is based on the caller's address passed on by Home
+  Assistant; when that says nothing (for example a loopback address), nothing is shown.
+
 ## 1.5.7
 
 - The viewer no longer gets extra bottom padding for the Home button, which pushed the article under the

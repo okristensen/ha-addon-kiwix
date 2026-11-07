@@ -78,6 +78,11 @@
       color: #fff; font: inherit; font-weight: 600; font-size: 15px;
       background: linear-gradient(135deg, var(--accent), var(--accent-2));
     }
+    .net { display: inline-block; margin: 10px 0 0; padding: 3px 12px; border-radius: 999px; font-size: 12px; font-weight: 600;
+      background: var(--chip); color: var(--muted); }
+    .net::before { content: ""; display: inline-block; width: 8px; height: 8px; border-radius: 50%; margin-right: 7px;
+      background: #2fb36d; }
+    .net.remote::before { background: #e8a33a; }
     .scopes { display: flex; gap: 8px; justify-content: center; flex-wrap: wrap; margin-top: 12px; }
     .scope {
       border: 1px solid var(--border); background: var(--card); color: var(--muted);
@@ -146,6 +151,7 @@
       </div>
       <h1>Kiwix</h1>
       <p class="sub" id="sub"></p>
+      <p class="net" id="net" hidden></p>
 
       <div class="search" id="searchbox" hidden>
         <form id="form" autocomplete="off">
@@ -174,7 +180,7 @@
       articles: "artikler", books1: "1 bog", booksN: "bøger", sub0: "Intet indhold endnu",
       emptyText: "Du har ikke hentet noget endnu.", emptyCta: "Hent indhold",
       error: "Kunne ikke læse biblioteket.", retry: "Prøv igen", powered: "Drevet af",
-      fullText: "Søg efter", offline: "Virker uden internet",
+      fullText: "Søg efter", offline: "Virker uden internet", netLocal: "Lokalt netværk", netRemote: "Via nettet",
     },
     en: {
       manage: "Manage content", search: "Search", library: "Your library",
@@ -182,7 +188,7 @@
       articles: "articles", books1: "1 book", booksN: "books", sub0: "No content yet",
       emptyText: "You haven't downloaded anything yet.", emptyCta: "Get content",
       error: "Could not read the library.", retry: "Retry", powered: "Powered by",
-      fullText: "Search for", offline: "Works offline",
+      fullText: "Search for", offline: "Works offline", netLocal: "Home network", netRemote: "Over the internet",
     },
   }[lang];
   document.documentElement.lang = lang;
@@ -373,7 +379,15 @@
 
   // Only administrators get the link to the management page.
   fetch("../api/me").then((r) => (r.ok ? r.json() : { admin: false })).catch(() => ({ admin: false }))
-    .then((me) => { $("manage").hidden = !me.admin; });
+    .then((me) => {
+      $("manage").hidden = !me.admin;
+      if (me.network) {
+        const net = $("net");
+        net.textContent = me.network === "local" ? T.netLocal : T.netRemote;
+        net.classList.toggle("remote", me.network === "remote");
+        net.hidden = false;
+      }
+    });
 
   load();
 })();
