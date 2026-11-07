@@ -820,6 +820,12 @@ class Handler(BaseHTTPRequestHandler):
             if key.lower() in FORWARDED_HEADERS
         }
         headers["Host"] = self.headers.get("Host", "")
+        page_path = self.path.split("?", 1)[0]
+        if page_path.startswith("/reader/") and page_path != "/reader/" and not page_path.startswith("/reader/skin/"):
+            # Pages get the Home button added, so a cached copy from before
+            # (a 304 answer) must never be reused.
+            for key in [k for k in headers if k.lower() in ("if-none-match", "if-modified-since")]:
+                del headers[key]
         # kiwix-serve is configured with the full ingress prefix as its root,
         # so the prefix Home Assistant strips has to be added back.
         ingress_path = reader.root.removesuffix("/reader")

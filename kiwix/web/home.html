@@ -313,7 +313,7 @@
     const sel = scoped();
     const params = new URLSearchParams();
     if (sel.length === 1) params.set("content", sel[0].id);
-    else sel.forEach((b) => params.append("books.name", b.name));
+    else sel.forEach((b) => params.append("books.name", b.id));
     params.set("pattern", q);
     location.href = `search?${params}`;
   });

@@ -1,5 +1,10 @@
 # Changelog
 
+## 1.5.4
+
+- Searching across all books works again ("No such book" fixed): books are addressed by their library id.
+- The Home button now also appears on pages a browser had cached earlier (no more 304 answers for them).
+
 ## 1.5.3
 
 - Search filter chips with the same title (for example two Wikipedias) now show the language too.
