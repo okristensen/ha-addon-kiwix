@@ -1,5 +1,10 @@
 # Changelog
 
+## 1.4.1
+
+- Front page: fix "No such book" when searching. Books are now addressed by the name Kiwix uses in
+  its own links instead of the catalog name.
+
 ## 1.4.0
 
 - Managing content is for Home Assistant administrators only. The "Manage content" button on the

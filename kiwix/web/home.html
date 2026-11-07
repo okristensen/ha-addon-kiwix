@@ -219,8 +219,13 @@
         const name = text(entry, "name");
         const icon = Array.from(entry.children).find((c) => c.localName === "link" && (c.getAttribute("rel") || "").includes("image"));
         const file = files.find((f) => name && f.file.startsWith(name));
+        // Kiwix addresses a book by the last part of its content link, which is
+        // not always the same as the catalog name (e.g. it includes flavour and date).
+        const page = Array.from(entry.children).find((c) => c.localName === "link" && (c.getAttribute("type") || "").startsWith("text/html"));
+        const id = page ? decodeURIComponent(page.getAttribute("href").replace(/\/+$/, "").split("/").pop()) : name;
         return {
           name,
+          id,
           title: text(entry, "title"),
           desc: text(entry, "summary") || text(entry, "content"),
           lang: text(entry, "language"),
@@ -263,7 +268,7 @@
       const li = document.createElement("li");
       const a = document.createElement("a");
       a.className = "book";
-      a.href = `viewer#${encodeURIComponent(b.name)}`;
+      a.href = `viewer#${encodeURIComponent(b.id)}`;
       const img = document.createElement("img");
       img.className = "cover"; img.alt = ""; img.loading = "lazy";
       if (b.icon) {
@@ -305,7 +310,7 @@
     if (!q) return;
     const sel = scoped();
     const params = new URLSearchParams();
-    if (sel.length === 1) params.set("content", sel[0].name);
+    if (sel.length === 1) params.set("content", sel[0].id);
     else sel.forEach((b) => params.append("books.name", b.name));
     params.set("pattern", q);
     location.href = `search?${params}`;
@@ -320,7 +325,7 @@
       const mine = ++seq;
       if (q.length < 2) { box.hidden = true; return; }
       const lists = await Promise.all(scoped().map((b) =>
-        fetch(`suggest?content=${encodeURIComponent(b.name)}&term=${encodeURIComponent(q)}&count=5`)
+        fetch(`suggest?content=${encodeURIComponent(b.id)}&term=${encodeURIComponent(q)}&count=5`)
           .then((r) => (r.ok ? r.json() : [])).catch(() => [])
           .then((items) => items.filter((i) => i.path).map((i) => ({ book: b, item: i })))));
       if (mine !== seq) return;
@@ -329,7 +334,7 @@
       for (const { book, item } of hits) {
         const li = document.createElement("li");
         const a = document.createElement("a");
-        a.href = `viewer#${encodeURIComponent(book.name)}/${item.path.split("/").map(encodeURIComponent).join("/")}`;
+        a.href = `viewer#${encodeURIComponent(book.id)}/${item.path.split("/").map(encodeURIComponent).join("/")}`;
         const t = document.createElement("span"); t.textContent = item.label || item.value;
         a.appendChild(t);
         if (books.length > 1) { const s = document.createElement("small"); s.textContent = book.title; a.appendChild(s); }
