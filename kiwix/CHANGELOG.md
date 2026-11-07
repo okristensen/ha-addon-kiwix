@@ -1,5 +1,9 @@
 # Changelog
 
+## 1.5.3
+
+- Search filter chips with the same title (for example two Wikipedias) now show the language too.
+
 ## 1.5.2
 
 - The "Home" button (bottom left) is now on every reader page: the viewer, articles, search results and

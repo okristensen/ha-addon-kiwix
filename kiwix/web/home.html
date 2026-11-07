@@ -294,7 +294,9 @@
     if (books.length > 1) {
       for (const b of [{ name: null, title: T.all }, ...books]) {
         const s = document.createElement("button");
-        s.type = "button"; s.className = "scope"; s.textContent = b.title;
+        const twin = b.name && books.some((o) => o !== b && o.title === b.title);
+        s.type = "button"; s.className = "scope";
+        s.textContent = twin && b.lang ? `${b.title} · ${langName(b.lang)}` : b.title;
         s.setAttribute("aria-pressed", String(scope === b.name));
         s.onclick = () => { scope = b.name; render(); suggest(); };
         scopes.appendChild(s);
