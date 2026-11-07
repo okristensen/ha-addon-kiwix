@@ -219,20 +219,48 @@ def is_allowed_download_url(url):
     )
 
 
+SEARCH_PAGE_CSS = """
+:root{color-scheme:light dark;--bg:#f3f5f8;--card:#fff;--text:#14181d;--muted:#66707c;--border:#e1e5ea;--accent:#0a8ee8;--accent2:#5b6cf0;--chip:#eef1f5}
+@media (prefers-color-scheme:dark){:root{--bg:#0f1216;--card:#1a1e24;--text:#eceff3;--muted:#8d97a3;--border:#292f37;--chip:#252b33}}
+html,body{background:var(--bg)!important;color:var(--text)!important}
+body{margin:0!important;padding:14px 14px calc(88px + env(safe-area-inset-bottom))!important;
+ font:16px/1.45 system-ui,-apple-system,"Segoe UI",Roboto,sans-serif!important}
+.header{font-size:14px!important;color:var(--muted)!important;margin:4px 2px 14px!important}
+.header b{color:var(--text)!important}
+ul{list-style:none!important;margin:0!important;padding:0!important}
+.results li,li.result{background:var(--card)!important;border:1px solid var(--border)!important;border-radius:18px!important;
+ padding:14px 16px!important;margin:0 0 12px!important;box-shadow:0 1px 2px rgba(16,24,40,.06),0 6px 18px rgba(16,24,40,.06);overflow:hidden}
+.results a{color:var(--text)!important;text-decoration:none!important;font-weight:700!important;font-size:18px!important;
+ line-height:1.3;overflow-wrap:anywhere;display:inline-block}
+cite{display:block!important;font-style:normal!important;font-size:14px!important;color:var(--muted)!important;margin-top:6px;
+ overflow-wrap:anywhere;max-height:6.6em;overflow:hidden}
+cite b{color:var(--text)!important}
+.book-title,.informations{display:inline-block!important;margin:10px 6px 0 0!important;padding:2px 10px;border-radius:999px;
+ background:var(--chip)!important;color:var(--muted)!important;font-size:12px!important;font-weight:600}
+footer{margin-top:18px}
+footer ul{display:flex!important;flex-wrap:wrap;gap:8px;justify-content:center}
+footer li a{display:block;padding:9px 15px;border-radius:12px;background:var(--card);border:1px solid var(--border);
+ color:var(--text)!important;text-decoration:none!important;font-weight:600}
+#kiwix-home-bar{position:fixed;left:0;right:0;bottom:0;z-index:2147483647;display:flex;justify-content:flex-start;
+ padding:10px 14px calc(10px + env(safe-area-inset-bottom));background:color-mix(in srgb,var(--bg) 82%,transparent);
+ -webkit-backdrop-filter:blur(14px);backdrop-filter:blur(14px);border-top:1px solid var(--border)}
+#kiwix-home-bar a{display:inline-flex;align-items:center;gap:6px;padding:10px 18px;border-radius:999px;color:#fff!important;
+ text-decoration:none!important;font:600 15px system-ui,sans-serif;background:linear-gradient(135deg,var(--accent),var(--accent2))}
+"""
+
+
 def add_back_link(html, accept_language, ingress_path):
-    """Insert a floating link back to the front page into a search result page."""
+    """Style a search result page like the front page and add a bar leading back to it."""
     label = "\u2190 Forside" if accept_language.lower().startswith("da") else "\u2190 Home"
-    link = (
-        f'<a href="{ingress_path}/reader/" style="position:fixed;left:12px;'
-        "bottom:10px;z-index:2147483647;"
-        "padding:8px 14px;border-radius:999px;background:#03a9f4;color:#fff;"
-        "font:600 14px system-ui,sans-serif;text-decoration:none;"
-        f'box-shadow:0 2px 8px rgba(0,0,0,.3)">{label}</a>'
-    ).encode()
+    style = ("<style>" + SEARCH_PAGE_CSS + "</style>").encode()
+    bar = f'<div id="kiwix-home-bar"><a href="{ingress_path}/reader/">{label}</a></div>'.encode()
+    lowered = html.lower()
+    head = lowered.rfind(b"</head>")
+    html = style + html if head == -1 else html[:head] + style + html[head:]
     index = html.lower().rfind(b"</body>")
     if index == -1:
-        return html + link
-    return html[:index] + link + html[index:]
+        return html + bar
+    return html[:index] + bar + html[index:]
 
 
 def parse_catalog(xml_bytes):

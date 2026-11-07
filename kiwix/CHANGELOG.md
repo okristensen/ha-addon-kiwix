@@ -1,5 +1,10 @@
 # Changelog
 
+## 1.5.0
+
+- Search result pages are styled like the front page (cards, chips, light/dark) and the "Home" link is
+  now a bar at the bottom instead of a button on top of the text.
+
 ## 1.4.2
 
 - Front page: search suggestions show the plain article title instead of Kiwix's highlight markup.
