@@ -37,6 +37,7 @@ from pathlib import Path
 
 LIBRARY_DIR = Path(os.environ.get("KIWIX_LIBRARY_DIR", "/share/kiwix"))
 QUEUE_FILE = LIBRARY_DIR / ".downloads.json"
+HIDDEN_FILE = LIBRARY_DIR / ".hidden.json"
 CATALOG_URL = os.environ.get(
     "KIWIX_CATALOG_URL", "https://library.kiwix.org/catalog/v2/entries"
 )
@@ -700,11 +701,30 @@ admins = Admins()
 # --------------------------------------------------------------------------
 # HTTP API
 # --------------------------------------------------------------------------
+def hidden_books():
+    """Files an administrator has hidden from the front page list."""
+    try:
+        return set(json.loads(HIDDEN_FILE.read_text()))
+    except (OSError, ValueError, TypeError):
+        return set()
+
+
+def set_hidden(file, hidden):
+    name = Path(file).name
+    if not name.endswith(".zim"):
+        raise ValueError("Not a ZIM file")
+    current = hidden_books()
+    current.add(name) if hidden else current.discard(name)
+    HIDDEN_FILE.write_text(json.dumps(sorted(current)))
+
+
 def library_state():
     files = []
+    hidden = hidden_books()
     for path in kiwix.zim_files():
         info = path.stat()
-        files.append({"file": path.name, "size": info.st_size, "mtime": int(info.st_mtime)})
+        files.append({"file": path.name, "size": info.st_size, "mtime": int(info.st_mtime),
+                      "hidden": path.name in hidden})
     return {
         "running": kiwix.running,
         "reader": reader.running,
@@ -803,6 +823,8 @@ class Handler(BaseHTTPRequestHandler):
                 downloads.cancel(str(body.get("file", "")))
             elif route == "/api/delete":
                 self._delete(str(body.get("file", "")))
+            elif route == "/api/visibility":
+                set_hidden(str(body.get("file", "")), bool(body.get("hidden")))
             else:
                 self._json(404, {"error": "Not found"})
                 return

@@ -23,6 +23,8 @@ const STRINGS = {
     cancel: "Cancel",
     dismiss: "Dismiss",
     remove: "Delete",
+    shown: "Shown on front page",
+    hiddenLabel: "Hidden from front page",
     confirmDelete: "Delete {file}?",
     articles: "articles",
     flavour: { nopic: "No images", mini: "Intro only", maxi: "Complete" },
@@ -50,6 +52,8 @@ const STRINGS = {
     cancel: "Annuller",
     dismiss: "Luk",
     remove: "Slet",
+    shown: "Vises på forsiden",
+    hiddenLabel: "Skjult på forsiden",
     confirmDelete: "Slet {file}?",
     articles: "artikler",
     flavour: { nopic: "Uden billeder", mini: "Kun intro", maxi: "Komplet" },
@@ -189,6 +193,15 @@ function renderInstalled(item) {
     el("div", {}, el("div", { class: "title", textContent: item.file }),
       el("div", { class: "meta", textContent: formatSize(item.size) })),
     el("div", { class: "actions" },
+      el("button", {
+        class: "button",
+        textContent: item.hidden ? t.hiddenLabel : t.shown,
+        title: item.hidden ? t.hiddenLabel : t.shown,
+        onclick: async () => {
+          await post("api/visibility", { file: item.file, hidden: !item.hidden });
+          refresh();
+        },
+      }),
       el("button", {
         class: "button danger",
         textContent: t.remove,

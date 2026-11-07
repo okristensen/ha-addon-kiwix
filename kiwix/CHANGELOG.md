@@ -1,5 +1,12 @@
 # Changelog
 
+## 1.7.0
+
+- Administrators can choose per book whether it is shown on the front page (button in the library list on
+  the management page). Hidden books are left out for everyone else and from search; administrators see
+  them in an extra "Hidden books" group below the others. This only hides the book from the list; it does
+  not block direct links. The choice is stored in `.hidden.json` in the library folder.
+
 ## 1.6.2
 
 - The network pill is gone from the front page. The dashboard card shows a small line under "Flere apps"

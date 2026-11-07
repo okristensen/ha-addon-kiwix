@@ -120,6 +120,8 @@
     .skeleton { height: 128px; border-radius: 20px; background: var(--chip); opacity: .6; animation: pulse 1.2s ease-in-out infinite; }
     @keyframes pulse { 50% { opacity: .3; } }
 
+    .group { grid-column: 1 / -1; margin: 14px 0 0; color: var(--muted); font-size: 13px; letter-spacing: .06em; text-transform: uppercase; }
+    .book.is-hidden { opacity: .6; }
     .empty { text-align: center; padding: 36px 16px; background: var(--card); border: 1px dashed var(--border); border-radius: 20px; }
     .empty p { margin: 0 0 14px; color: var(--muted); }
     .cta {
@@ -175,6 +177,7 @@
       emptyText: "Du har ikke hentet noget endnu.", emptyCta: "Hent indhold",
       error: "Kunne ikke læse biblioteket.", retry: "Prøv igen", powered: "Drevet af",
       fullText: "Søg efter", offline: "Virker uden internet",
+      hiddenGroup: "Skjulte bøger",
     },
     en: {
       manage: "Manage content", search: "Search", library: "Your library",
@@ -183,6 +186,7 @@
       emptyText: "You haven't downloaded anything yet.", emptyCta: "Get content",
       error: "Could not read the library.", retry: "Retry", powered: "Powered by",
       fullText: "Search for", offline: "Works offline",
+      hiddenGroup: "Hidden books",
     },
   }[lang];
   document.documentElement.lang = lang;
@@ -205,17 +209,20 @@
   };
 
   let books = [];
+  let hiddenBooks = []; // only filled for administrators
   let scope = null; // null = all books, otherwise a book name
 
   async function load() {
     try {
-      const [feed, state] = await Promise.all([
+      const [feed, state, me] = await Promise.all([
         fetch("catalog/v2/entries?count=200").then((r) => { if (!r.ok) throw new Error(r.status); return r.text(); }),
         fetch("../api/state").then((r) => (r.ok ? r.json() : null)).catch(() => null),
+        fetch("../api/me").then((r) => (r.ok ? r.json() : { admin: false })).catch(() => ({ admin: false })),
       ]);
+      $("manage").hidden = !me.admin;
       const doc = new DOMParser().parseFromString(feed, "text/xml");
       const files = state ? state.library : [];
-      books = Array.from(doc.getElementsByTagName("entry")).map((entry) => {
+      const all = Array.from(doc.getElementsByTagName("entry")).map((entry) => {
         const name = text(entry, "name");
         const icon = Array.from(entry.children).find((c) => c.localName === "link" && (c.getAttribute("rel") || "").includes("image"));
         const file = files.find((f) => name && f.file.startsWith(name));
@@ -232,8 +239,11 @@
           articles: parseInt(text(entry, "articleCount"), 10) || 0,
           icon: icon ? icon.getAttribute("href") : "",
           size: file ? file.size : 0,
+          hidden: !!(file && file.hidden),
         };
       }).filter((b) => b.name);
+      books = all.filter((b) => !b.hidden);
+      hiddenBooks = me.admin ? all.filter((b) => b.hidden) : [];
       render();
     } catch (e) {
       $("sub").textContent = T.error;
@@ -257,17 +267,22 @@
 
     const grid = $("grid");
     grid.innerHTML = "";
-    if (!books.length) {
+    if (!books.length && !hiddenBooks.length) {
       const li = document.createElement("li");
       li.className = "empty";
       const p = document.createElement("p"); p.textContent = T.emptyText;
       const a = document.createElement("a"); a.className = "cta"; a.href = "../"; a.textContent = T.emptyCta;
       li.append(p, a); grid.appendChild(li);
     }
-    for (const b of books) {
+    const cards = [...books.map((b) => [b, false]), ...hiddenBooks.map((b) => [b, true])];
+    for (const [b, isHidden] of cards) {
+      if (isHidden && b === hiddenBooks[0]) {
+        const g = document.createElement("li");
+        g.className = "group"; g.textContent = T.hiddenGroup; grid.appendChild(g);
+      }
       const li = document.createElement("li");
       const a = document.createElement("a");
-      a.className = "book";
+      a.className = isHidden ? "book is-hidden" : "book";
       a.href = `viewer#${encodeURIComponent(b.id)}`;
       const img = document.createElement("img");
       img.className = "cover"; img.alt = ""; img.loading = "lazy";
@@ -370,12 +385,6 @@
   }
   $("q").addEventListener("input", suggest);
   document.addEventListener("click", (ev) => { if (!ev.target.closest(".search")) $("sugg").hidden = true; });
-
-  // Only administrators get the link to the management page.
-  fetch("../api/me").then((r) => (r.ok ? r.json() : { admin: false })).catch(() => ({ admin: false }))
-    .then((me) => {
-      $("manage").hidden = !me.admin;
-    });
 
   load();
 })();
