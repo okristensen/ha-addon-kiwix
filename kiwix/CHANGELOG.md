@@ -1,5 +1,9 @@
 # Changelog
 
+## 1.0.1
+
+- Fix downloads being rejected when the catalog lists `http://` download links.
+
 ## 1.0.0
 
 - Initial release: catalog browser, resumable downloads and library management,

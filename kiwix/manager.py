@@ -141,6 +141,15 @@ def _to_int(value):
         return 0
 
 
+def normalize_download_url(url):
+    """Strip the Metalink suffix and upgrade Kiwix's http links to https."""
+    if url.endswith(".meta4"):
+        url = url[: -len(".meta4")]
+    if url.startswith("http://download.kiwix.org/"):
+        url = "https://" + url[len("http://"):]
+    return url
+
+
 def parse_catalog(xml_bytes):
     """Parse a Kiwix OPDS feed into ``(total_results, entries)``."""
     root = ET.fromstring(xml_bytes)
@@ -154,8 +163,7 @@ def parse_catalog(xml_bytes):
             if _local(link.tag) == "link" and link.get("type") == "application/x-zim":
                 url = link.get("href", "")
                 size = _to_int(link.get("length"))
-        if url.endswith(".meta4"):
-            url = url[: -len(".meta4")]
+        url = normalize_download_url(url)
         if not url:
             continue
         entries.append(
@@ -228,7 +236,9 @@ class DownloadManager:
             return [job.to_dict() for job in self._jobs.values()]
 
     def start(self, url, size):
+        url = normalize_download_url(url)
         if not url.startswith(DOWNLOAD_PREFIX) or not url.endswith(".zim"):
+            log(f"Rejected download URL: {url!r}")
             raise ValueError("Unsupported download URL")
         filename = url.rsplit("/", 1)[-1]
         if not FILENAME_RE.fullmatch(filename):
