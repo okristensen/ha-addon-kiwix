@@ -10,6 +10,12 @@
    Kiwix** to read inside Home Assistant, or use the direct link
    (`http://<home-assistant>:8080`) to open it in a separate browser tab.
 
+## Who can do what
+
+Everyone who can open the app can read. The management page, the catalog and the
+download and delete actions are for Home Assistant administrators only; other users
+are sent to the reader and do not see the **Manage content** button.
+
 ## Storage
 
 Downloaded files live in `/share/kiwix` (available through the Samba share).

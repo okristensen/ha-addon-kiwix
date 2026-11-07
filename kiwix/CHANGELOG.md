@@ -1,5 +1,12 @@
 # Changelog
 
+## 1.4.0
+
+- Managing content is for Home Assistant administrators only. The "Manage content" button on the
+  front page is hidden for everyone else, and the management page, the catalog and the download,
+  cancel and delete actions are refused for non-admins (who are sent to the reader instead).
+  Administrators are read from Home Assistant with the app's own token.
+
 ## 1.3.2
 
 - Downloads now continue by themselves after the app is restarted or updated. Unfinished downloads

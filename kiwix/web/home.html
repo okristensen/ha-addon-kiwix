@@ -47,6 +47,7 @@
       box-shadow: var(--shadow);
       font-size: 14px; font-weight: 600;
     }
+    .manage[hidden] { display: none; }
     .manage svg { width: 18px; height: 18px; }
 
     .hero { text-align: center; padding: 28px 0 8px; }
@@ -133,7 +134,7 @@
 <body>
   <div class="wrap">
     <div class="top">
-      <a class="manage" href="../">
+      <a class="manage" href="../" id="manage" hidden>
         <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M15 18l-6-6 6-6"/></svg>
         <span data-t="manage"></span>
       </a>
@@ -339,6 +340,10 @@
   }
   $("q").addEventListener("input", suggest);
   document.addEventListener("click", (ev) => { if (!ev.target.closest(".search")) $("sugg").hidden = true; });
+
+  // Only administrators get the link to the management page.
+  fetch("../api/me").then((r) => (r.ok ? r.json() : { admin: false })).catch(() => ({ admin: false }))
+    .then((me) => { $("manage").hidden = !me.admin; });
 
   load();
 })();

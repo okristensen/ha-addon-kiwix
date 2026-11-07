@@ -14,12 +14,15 @@ Runs five things in one small process (standard library only):
   served via Home Assistant ingress.
 """
 
+import base64
 import http.client
 import json
 import os
 import re
 import shutil
 import signal
+import socket
+import struct
 import subprocess
 import sys
 import threading
@@ -46,6 +49,7 @@ ALLOWED_CLIENTS = set(
     os.environ.get("KIWIX_ALLOWED_CLIENTS", "172.30.32.2,127.0.0.1").split(",")
 )
 HA_API_URL = os.environ.get("KIWIX_HA_API_URL", "http://supervisor/core/api")
+HA_WS_ADDRESS = (os.environ.get("KIWIX_HA_WS_HOST", "supervisor"), int(os.environ.get("KIWIX_HA_WS_PORT", "80")))
 SENSOR_ENTITY = "sensor.kiwix_library"
 USER_AGENT = "ha-addon-kiwix (+https://github.com/okristensen/ha-addon-kiwix)"
 WEB_DIR = Path(__file__).resolve().parent / "web"
@@ -512,6 +516,132 @@ def publish_sensor():
 
 
 # --------------------------------------------------------------------------
+# Who is an administrator?
+# --------------------------------------------------------------------------
+# Home Assistant ingress tells the app which user is calling (X-Remote-User-Id)
+# but not whether that user is an administrator, so the list of users is read
+# from Home Assistant's websocket API with the app's own token.
+class _WebSocket:
+    """Just enough of a websocket client to ask Home Assistant one question."""
+
+    def __init__(self, address, path, timeout=10):
+        self.sock = socket.create_connection(address, timeout=timeout)
+        key = base64.b64encode(os.urandom(16)).decode()
+        self.sock.sendall(
+            (
+                f"GET {path} HTTP/1.1\r\nHost: {address[0]}\r\nUpgrade: websocket\r\n"
+                f"Connection: Upgrade\r\nSec-WebSocket-Key: {key}\r\nSec-WebSocket-Version: 13\r\n\r\n"
+            ).encode()
+        )
+        self.buffer = b""
+        while b"\r\n\r\n" not in self.buffer:
+            self.buffer += self._read(4096)
+        head, self.buffer = self.buffer.split(b"\r\n\r\n", 1)
+        if b" 101 " not in head.split(b"\r\n", 1)[0]:
+            raise OSError("websocket upgrade refused")
+
+    def _read(self, size):
+        chunk = self.sock.recv(size)
+        if not chunk:
+            raise OSError("websocket closed")
+        return chunk
+
+    def _take(self, size):
+        while len(self.buffer) < size:
+            self.buffer += self._read(65536)
+        data, self.buffer = self.buffer[:size], self.buffer[size:]
+        return data
+
+    def send(self, payload):
+        data = json.dumps(payload).encode()
+        mask = os.urandom(4)
+        size = len(data)
+        if size < 126:
+            header = bytes([0x81, 0x80 | size])
+        elif size < 65536:
+            header = bytes([0x81, 0x80 | 126]) + struct.pack(">H", size)
+        else:
+            header = bytes([0x81, 0x80 | 127]) + struct.pack(">Q", size)
+        masked = bytes(byte ^ mask[i % 4] for i, byte in enumerate(data))
+        self.sock.sendall(header + mask + masked)
+
+    def receive(self):
+        message = b""
+        while True:
+            first, second = self._take(2)
+            size = second & 0x7F
+            if size == 126:
+                size = struct.unpack(">H", self._take(2))[0]
+            elif size == 127:
+                size = struct.unpack(">Q", self._take(8))[0]
+            data = self._take(size)  # server frames are not masked
+            opcode = first & 0x0F
+            if opcode == 8:
+                raise OSError("websocket closed")
+            if opcode in (9, 10):
+                continue  # ping/pong
+            message += data
+            if first & 0x80:
+                return json.loads(message)
+
+    def close(self):
+        self.sock.close()
+
+
+def fetch_admin_ids():
+    token = os.environ.get("SUPERVISOR_TOKEN")
+    if not token:
+        raise OSError("no SUPERVISOR_TOKEN")
+    ws = _WebSocket(HA_WS_ADDRESS, "/core/websocket")
+    try:
+        ws.receive()  # auth_required
+        ws.send({"type": "auth", "access_token": token})
+        if ws.receive().get("type") != "auth_ok":
+            raise OSError("Home Assistant refused the app token")
+        ws.send({"id": 1, "type": "config/auth/list"})
+        while True:
+            reply = ws.receive()
+            if reply.get("id") == 1:
+                break
+        if not reply.get("success"):
+            raise OSError(f"could not list users: {reply.get('error')}")
+        return {
+            user["id"]
+            for user in reply["result"]
+            if user.get("is_owner") or "system-admin" in user.get("group_ids", [])
+        }
+    finally:
+        ws.close()
+
+
+class Admins:
+    """Cached list of Home Assistant administrators."""
+
+    def __init__(self, ttl=60):
+        self._ttl = ttl
+        self._ids = set()
+        self._fetched = None
+        self._lock = threading.Lock()
+
+    def is_admin(self, user_id):
+        if not user_id:
+            return False
+        with self._lock:
+            now = time.monotonic()
+            if self._fetched is None or now - self._fetched > self._ttl:
+                try:
+                    self._ids = fetch_admin_ids()
+                    self._fetched = now
+                except (OSError, ValueError, KeyError) as error:
+                    log(f"Could not read the administrator list: {error}")
+                    self._fetched = now - self._ttl + 10  # try again in 10 s
+            return user_id in self._ids
+
+
+admins = Admins()
+
+
+# --------------------------------------------------------------------------
 # HTTP API
 # --------------------------------------------------------------------------
 def library_state():
@@ -560,6 +690,9 @@ class Handler(BaseHTTPRequestHandler):
             return False
         return True
 
+    def _is_admin(self):
+        return admins.is_admin(self.headers.get("X-Remote-User-Id", "").strip())
+
     # -- routes ----------------------------------------------------------
     def do_GET(self):  # noqa: N802 - http.server naming
         if not self._guard():
@@ -579,8 +712,19 @@ class Handler(BaseHTTPRequestHandler):
             self._proxy_reader()
         elif route == "/api/state":
             self._json(200, library_state())
+        elif route == "/api/me":
+            self._json(200, {"admin": self._is_admin()})
         elif route == "/api/catalog":
-            self._catalog(urllib.parse.parse_qs(parsed.query))
+            if self._is_admin():
+                self._catalog(urllib.parse.parse_qs(parsed.query))
+            else:
+                self._json(403, {"error": "Administrators only"})
+        elif route in ("/", "/index.html") and not self._is_admin():
+            # Managing content is for administrators; everyone else gets the reader.
+            self.send_response(302)
+            self.send_header("Location", "reader/")
+            self.send_header("Content-Length", "0")
+            self.end_headers()
         else:
             name = "index.html" if route == "/" else route.lstrip("/")
             if name in STATIC_TYPES:
@@ -592,6 +736,9 @@ class Handler(BaseHTTPRequestHandler):
         if not self._guard():
             return
         route = "/" + urllib.parse.urlparse(self.path).path.strip("/")
+        if not self._is_admin():
+            self._json(403, {"error": "Administrators only"})
+            return
         body = self._body()
         try:
             if route == "/api/download":
