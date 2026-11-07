@@ -1,5 +1,11 @@
 # Changelog
 
+## 1.5.6
+
+- Fixes the Home button being hidden whenever the reader sits in the dashboard iframe: only an article
+  inside the viewer's own iframe goes without it.
+- Only successful and error pages are decorated (not redirects or skin files), to keep the viewer loading.
+
 ## 1.5.5
 
 - Kiwix cannot search books in different languages at once ("Two or more books in different languages").

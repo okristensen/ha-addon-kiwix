@@ -266,10 +266,10 @@ def add_back_link(html, accept_language, ingress_path):
 def add_home_button(html, accept_language, ingress_path):
     """Add a floating "front page" button, bottom left, to a reader page.
 
-    It is shown on every page that fills the window (viewer, articles opened
-    from search results, error pages). An article shown inside the viewer's
-    iframe stays without one, since the viewer page carries it (decided in the
-    browser by checking whether the page sits in a frame).
+    It is shown on every page except an article inside the viewer's iframe,
+    which goes without since the viewer page carries it (decided in the
+    browser by looking at the parent page; the reader itself may sit in an
+    iframe in the Home Assistant dashboard, so "framed" alone is not enough).
     """
     label = "\u2190 Forside" if accept_language.lower().startswith("da") else "\u2190 Home"
     snippet = (
@@ -279,7 +279,7 @@ def add_home_button(html, accept_language, ingress_path):
         "font:600 15px system-ui,sans-serif;background:linear-gradient(135deg,#0a8ee8,#5b6cf0);"
         'box-shadow:0 4px 14px rgba(0,0,0,.3)">' + label + "</a>"
         "<script>(function(){var framed=false;"
-        "try{framed=parent!==window}catch(e){framed=true}"
+        "try{framed=parent!==window&&/\\/reader\\/viewer/.test(parent.location.pathname)}catch(e){}"
         'if(!framed){document.getElementById("kiwix-home-btn").style.display="inline-flex";'
         'document.body.style.paddingBottom="calc(76px + env(safe-area-inset-bottom))"}})();</script>'
     ).encode()
@@ -842,10 +842,15 @@ class Handler(BaseHTTPRequestHandler):
             decorate = None
             if page.rstrip("/") == "/reader/search":
                 decorate = add_back_link
-            elif page.startswith("/reader/") and page != "/reader/":
+            elif (
+                page.startswith("/reader/")
+                and page != "/reader/"
+                and not page.startswith("/reader/skin/")
+            ):
                 decorate = add_home_button
             if (
                 decorate
+                and (upstream.status == 200 or upstream.status >= 400)
                 and upstream.getheader("Content-Type", "").startswith("text/html")
                 and not upstream.getheader("Content-Encoding")
             ):
