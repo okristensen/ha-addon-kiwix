@@ -263,7 +263,7 @@ def add_back_link(html, accept_language, ingress_path):
     return html[:index] + bar + html[index:]
 
 
-def add_home_button(html, accept_language, ingress_path):
+def add_home_button(html, accept_language, ingress_path, pad=True):
     """Add a floating "front page" button, bottom left, to a reader page.
 
     It is shown on every page except an article inside the viewer's iframe,
@@ -281,7 +281,8 @@ def add_home_button(html, accept_language, ingress_path):
         "<script>(function(){var framed=false;"
         "try{framed=parent!==window&&/\\/reader\\/viewer/.test(parent.location.pathname)}catch(e){}"
         'if(!framed){document.getElementById("kiwix-home-btn").style.display="inline-flex";'
-        'document.body.style.paddingBottom="calc(76px + env(safe-area-inset-bottom))"}})();</script>'
+        + ('document.body.style.paddingBottom="calc(76px + env(safe-area-inset-bottom))"' if pad else "")
+        + "}})();</script>"
     ).encode()
     index = html.lower().rfind(b"</body>")
     if index == -1:
@@ -848,6 +849,10 @@ class Handler(BaseHTTPRequestHandler):
                 and not page.startswith("/reader/skin/")
             ):
                 decorate = add_home_button
+                if page.rstrip("/") == "/reader/viewer":
+                    # The viewer sizes its own iframe to the window, so extra
+                    # padding would push the article under the screen edge.
+                    decorate = lambda html, lang, root: add_home_button(html, lang, root, pad=False)
             if (
                 decorate
                 and (upstream.status == 200 or upstream.status >= 400)

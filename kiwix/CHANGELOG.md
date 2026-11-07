@@ -1,5 +1,10 @@
 # Changelog
 
+## 1.5.7
+
+- The viewer no longer gets extra bottom padding for the Home button, which pushed the article under the
+  bottom edge and made the page jump.
+
 ## 1.5.6
 
 - Fixes the Home button being hidden whenever the reader sits in the dashboard iframe: only an article
