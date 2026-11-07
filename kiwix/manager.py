@@ -30,7 +30,7 @@ LIBRARY_DIR = Path(os.environ.get("KIWIX_LIBRARY_DIR", "/share/kiwix"))
 CATALOG_URL = os.environ.get(
     "KIWIX_CATALOG_URL", "https://library.kiwix.org/catalog/v2/entries"
 )
-DOWNLOAD_PREFIX = os.environ.get("KIWIX_DOWNLOAD_PREFIX", "https://download.kiwix.org/")
+DOWNLOAD_HOST = os.environ.get("KIWIX_DOWNLOAD_HOST", "download.kiwix.org")
 KIWIX_SERVE = os.environ.get("KIWIX_SERVE_BIN", "/usr/local/bin/kiwix-serve")
 KIWIX_PORT = int(os.environ.get("KIWIX_PORT", "8080"))
 MANAGER_PORT = int(os.environ.get("MANAGER_PORT", "8099"))
@@ -141,13 +141,29 @@ def _to_int(value):
         return 0
 
 
+def _is_download_host(hostname):
+    """True for the Kiwix download host and its subdomains (e.g. lb.download...)."""
+    hostname = (hostname or "").lower()
+    return hostname == DOWNLOAD_HOST or hostname.endswith("." + DOWNLOAD_HOST)
+
+
 def normalize_download_url(url):
     """Strip the Metalink suffix and upgrade Kiwix's http links to https."""
     if url.endswith(".meta4"):
         url = url[: -len(".meta4")]
-    if url.startswith("http://download.kiwix.org/"):
-        url = "https://" + url[len("http://"):]
+    parsed = urllib.parse.urlparse(url)
+    if parsed.scheme == "http" and _is_download_host(parsed.hostname):
+        url = parsed._replace(scheme="https").geturl()
     return url
+
+
+def is_allowed_download_url(url):
+    parsed = urllib.parse.urlparse(url)
+    return (
+        parsed.scheme == "https"
+        and _is_download_host(parsed.hostname)
+        and parsed.path.endswith(".zim")
+    )
 
 
 def parse_catalog(xml_bytes):
@@ -237,7 +253,7 @@ class DownloadManager:
 
     def start(self, url, size):
         url = normalize_download_url(url)
-        if not url.startswith(DOWNLOAD_PREFIX) or not url.endswith(".zim"):
+        if not is_allowed_download_url(url):
             log(f"Rejected download URL: {url!r}")
             raise ValueError("Unsupported download URL")
         filename = url.rsplit("/", 1)[-1]
