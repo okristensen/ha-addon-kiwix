@@ -1,5 +1,9 @@
 # Changelog
 
+## 1.7.1
+
+- Management page: the library buttons now wrap below the file name on narrow screens instead of running off the edge.
+
 ## 1.7.0
 
 - Administrators can choose per book whether it is shown on the front page (button in the library list on

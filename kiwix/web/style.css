@@ -43,7 +43,7 @@ h2 { margin: 32px 0 12px; font-size: 18px; }
 .list { list-style: none; margin: 0; padding: 0; display: grid; gap: 10px; }
 .item {
   display: grid;
-  grid-template-columns: 1fr auto;
+  grid-template-columns: minmax(0, 1fr) auto;
   gap: 4px 16px;
   align-items: center;
   padding: 14px 16px;
@@ -51,7 +51,7 @@ h2 { margin: 32px 0 12px; font-size: 18px; }
   border: 1px solid var(--border);
   border-radius: var(--radius);
 }
-.item .title { font-weight: 600; }
+.item .title { font-weight: 600; overflow-wrap: anywhere; }
 .item .meta { color: var(--muted); font-size: 13px; }
 .item .desc { grid-column: 1 / -1; color: var(--muted); font-size: 13px; }
 .item .actions { grid-row: 1 / span 2; grid-column: 2; display: flex; gap: 8px; }
@@ -70,6 +70,8 @@ h2 { margin: 32px 0 12px; font-size: 18px; }
 
 form { display: grid; grid-template-columns: 1fr auto auto auto; gap: 8px; margin-bottom: 14px; }
 @media (max-width: 640px) {
+  .item { grid-template-columns: minmax(0, 1fr); }
+  .item .actions { grid-row: auto; grid-column: 1; flex-wrap: wrap; margin-top: 6px; }
   form { grid-template-columns: 1fr 1fr; }
   form input { grid-column: 1 / -1; }
 }
