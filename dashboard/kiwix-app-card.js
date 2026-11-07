@@ -83,6 +83,7 @@ class KiwixAppCard extends HTMLElement {
         });
       }, 5 * 60 * 1000);
 
+      this._ingress = info.ingress_url;
       this._render(`<iframe src="${info.ingress_url}reader/" allow="fullscreen"></iframe>`);
       window.addEventListener("resize", this._onResize);
       requestAnimationFrame(() => this._fit());
@@ -107,6 +108,9 @@ class KiwixAppCard extends HTMLElement {
       this._apps = await helpers.createCardElement({ type: "custom:apps-kort", ...(this._config.apps_config || {}) });
       this._apps.hass = this._hass;
       box.appendChild(this._apps);
+      this._net = document.createElement("div");
+      this._net.style.cssText = "padding:4px 16px 12px;font-size:12px;color:var(--secondary-text-color);";
+      box.appendChild(this._net);
     } catch (error) {
       return;
     }
@@ -119,6 +123,7 @@ class KiwixAppCard extends HTMLElement {
       }
       box.hidden = !/\/reader\/?$/.test(path);
       watchBody();
+      this._updateNet();
       this._fit();
     };
     // On the front page the reader is as tall as its content and this card
@@ -137,6 +142,29 @@ class KiwixAppCard extends HTMLElement {
     };
     frame.addEventListener("load", check);
     check();
+  }
+
+  // A small line under "Flere apps": do we reach Home Assistant from the home
+  // network or over the internet? The answer comes from the Kiwix app, which sees
+  // the address Home Assistant passes on (/api/me).
+  async _updateNet() {
+    if (!this._net || !this._ingress) return;
+    try {
+      const reply = await fetch(`${this._ingress}api/me`, { credentials: "same-origin", cache: "no-store" });
+      const me = await reply.json();
+      const da = String(this._hass?.language || "").startsWith("da");
+      if (!me.network) {
+        this._net.textContent = "";
+      } else {
+        const local = me.network === "local";
+        const text = local ? (da ? "Lokalt netværk" : "Home network") : da ? "Via nettet" : "Over the internet";
+        const dot = `<span style="display:inline-block;width:8px;height:8px;border-radius:50%;margin-right:6px;background:${local ? "#2fb36d" : "#e8a33a"}"></span>`;
+        this._net.innerHTML = `${dot}${text}${me.client_ip ? ` · ${me.client_ip}` : ""}`;
+      }
+    } catch (error) {
+      this._net.textContent = "";
+    }
+    this._fit();
   }
 
   // Fill exactly the space below the dashboard header. The card itself scrolls

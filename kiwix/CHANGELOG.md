@@ -1,5 +1,10 @@
 # Changelog
 
+## 1.6.2
+
+- The network pill is gone from the front page. The dashboard card shows a small line under "Flere apps"
+  instead (home network or internet, with the address Home Assistant sees).
+
 ## 1.6.1
 
 - The network pill also shows the address Home Assistant sees for you, to tell a home address from your
