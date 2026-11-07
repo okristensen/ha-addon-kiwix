@@ -1,5 +1,10 @@
 # Changelog
 
+## 1.2.0
+
+- Publish the library as `sensor.kiwix_library` (ZIM count; files, sizes, free space and
+  active downloads as attributes) so it can be shown on dashboards and used in automations.
+
 ## 1.1.1
 
 - Add a floating link on the reader pages that leads back to the library and catalog.

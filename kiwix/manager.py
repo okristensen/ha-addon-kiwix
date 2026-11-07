@@ -1,12 +1,14 @@
 #!/usr/bin/env python3
 """Kiwix app manager for Home Assistant.
 
-Runs four things in one small process (standard library only):
+Runs five things in one small process (standard library only):
 
 * a supervisor that keeps ``kiwix-serve`` running for every ZIM file in the
   library directory and restarts it whenever the library changes (one
   instance on a published port, one behind Home Assistant ingress),
 * a reverse proxy that exposes the ingress instance as ``reader/``,
+* a publisher that exposes the library as ``sensor.kiwix_library`` in Home
+  Assistant (for dashboards and automations),
 * a client for the public Kiwix catalog (OPDS), and
 * a resumable download manager, exposed through a small web UI that is
   served via Home Assistant ingress.
@@ -42,10 +44,13 @@ MANAGER_PORT = int(os.environ.get("MANAGER_PORT", "8099"))
 ALLOWED_CLIENTS = set(
     os.environ.get("KIWIX_ALLOWED_CLIENTS", "172.30.32.2,127.0.0.1").split(",")
 )
+HA_API_URL = os.environ.get("KIWIX_HA_API_URL", "http://supervisor/core/api")
+SENSOR_ENTITY = "sensor.kiwix_library"
 USER_AGENT = "ha-addon-kiwix (+https://github.com/okristensen/ha-addon-kiwix)"
 WEB_DIR = Path(__file__).resolve().parent / "web"
 SPACE_MARGIN = 1 << 30  # always keep 1 GiB free
 FILENAME_RE = re.compile(r"[A-Za-z0-9][A-Za-z0-9._-]*\.zim")
+ZIM_NAME_RE = re.compile(r"(.+)_(\d{4}-\d{2})\.zim")
 INGRESS_PATH_RE = re.compile(r"/api/hassio_ingress/[A-Za-z0-9_-]+")
 HOP_BY_HOP = {
     "connection", "keep-alive", "transfer-encoding", "te", "trailer", "upgrade",
@@ -154,6 +159,7 @@ SERVERS = (kiwix, reader)
 def restart_servers():
     for server in SERVERS:
         server.restart()
+    publish_sensor()
 
 
 def note_ingress_path(path):
@@ -341,6 +347,7 @@ class DownloadManager:
     def _finish(self, job):
         with self._lock:
             self._jobs.pop(job.file, None)
+        publish_sensor()
 
     def _run(self, job):
         part = LIBRARY_DIR / f"{job.file}.part"
@@ -349,12 +356,14 @@ class DownloadManager:
                 self._finish(job)
                 return
             job.status = "downloading"
+            publish_sensor()
             try:
                 self._download(job, part)
             except Exception as error:  # noqa: BLE001 - report any failure in the UI
                 job.status = "error"
                 job.error = str(error)
                 log(f"Download of {job.file} failed: {error}")
+                publish_sensor()
                 return
         if job.cancel.is_set():
             part.unlink(missing_ok=True)
@@ -398,6 +407,72 @@ class DownloadManager:
 
 
 downloads = DownloadManager()
+
+
+# --------------------------------------------------------------------------
+# Home Assistant sensor
+# --------------------------------------------------------------------------
+GIB = 1 << 30
+
+
+def sensor_payload():
+    """Build the ``sensor.kiwix_library`` state: ZIM count plus details."""
+    files = []
+    total = 0
+    for path in kiwix.zim_files():
+        size = path.stat().st_size
+        total += size
+        match = ZIM_NAME_RE.fullmatch(path.name)
+        name = (match.group(1) if match else path.stem).replace("_", " ")
+        files.append(
+            {
+                "name": name[:1].upper() + name[1:],
+                "file": path.name,
+                "date": match.group(2) if match else "",
+                "size_gb": round(size / GIB, 2),
+            }
+        )
+    active = [
+        {
+            "file": job["file"],
+            "status": job["status"],
+            "percent": int(job["done"] * 100 / job["total"]) if job["total"] else 0,
+        }
+        for job in downloads.snapshot()
+        if job["status"] != "error"
+    ]
+    return {
+        "state": len(files),
+        "attributes": {
+            "friendly_name": "Kiwix library",
+            "icon": "mdi:book-open-page-variant",
+            "files": files,
+            "total_size_gb": round(total / GIB, 2),
+            "free_space_gb": round(shutil.disk_usage(LIBRARY_DIR).free / GIB, 1),
+            "reader_running": kiwix.running,
+            "downloads": active,
+        },
+    }
+
+
+def publish_sensor():
+    """Write the library to Home Assistant. Never raises: it is best effort."""
+    token = os.environ.get("SUPERVISOR_TOKEN")
+    if not token:
+        return
+    try:
+        request = urllib.request.Request(
+            f"{HA_API_URL}/states/{SENSOR_ENTITY}",
+            data=json.dumps(sensor_payload()).encode(),
+            headers={
+                "Authorization": f"Bearer {token}",
+                "Content-Type": "application/json",
+            },
+            method="POST",
+        )
+        urllib.request.urlopen(request, timeout=10).close()
+    except Exception as error:  # noqa: BLE001 - best effort, report once per failure
+        log(f"Could not update {SENSOR_ENTITY}: {error}")
 
 
 # --------------------------------------------------------------------------
@@ -581,11 +656,17 @@ class Handler(BaseHTTPRequestHandler):
 # --------------------------------------------------------------------------
 # Entry point
 # --------------------------------------------------------------------------
-def watchdog(interval=15):
+def watchdog(interval=15, publish_every=60):
+    elapsed = 0
     while True:
         time.sleep(interval)
+        elapsed += interval
         for server in SERVERS:
             server.ensure_running()
+        if elapsed >= publish_every:
+            # Re-publish regularly: the entity disappears when Home Assistant restarts.
+            elapsed = 0
+            publish_sensor()
 
 
 def main():
