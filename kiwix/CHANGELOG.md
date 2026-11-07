@@ -1,5 +1,10 @@
 # Changelog
 
+## 1.5.2
+
+- The "Home" button (bottom left) is now on every reader page: the viewer, articles, search results and
+  error pages. Only an article shown inside the viewer goes without, since the viewer carries it.
+
 ## 1.5.1
 
 - Articles opened on their own (for example from search results) get a "Home" button at the bottom left.
