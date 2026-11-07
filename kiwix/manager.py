@@ -208,6 +208,22 @@ def is_allowed_download_url(url):
     )
 
 
+def add_back_link(html, accept_language, ingress_path):
+    """Insert a floating link back to the manager page into a reader page."""
+    label = "\u2190 Bibliotek" if accept_language.lower().startswith("da") else "\u2190 Library"
+    link = (
+        f'<a href="{ingress_path}/" style="position:fixed;right:12px;'
+        "bottom:calc(12px + env(safe-area-inset-bottom));z-index:2147483647;"
+        "padding:8px 14px;border-radius:999px;background:#03a9f4;color:#fff;"
+        "font:600 14px system-ui,sans-serif;text-decoration:none;"
+        f'box-shadow:0 2px 8px rgba(0,0,0,.3)">{label}</a>'
+    ).encode()
+    index = html.lower().rfind(b"</body>")
+    if index == -1:
+        return html + link
+    return html[:index] + link + html[index:]
+
+
 def parse_catalog(xml_bytes):
     """Parse a Kiwix OPDS feed into ``(total_results, entries)``."""
     root = ET.fromstring(xml_bytes)
@@ -491,20 +507,41 @@ class Handler(BaseHTTPRequestHandler):
         headers["Host"] = self.headers.get("Host", "")
         # kiwix-serve is configured with the full ingress prefix as its root,
         # so the prefix Home Assistant strips has to be added back.
-        upstream_path = reader.root.removesuffix("/reader") + self.path
+        ingress_path = reader.root.removesuffix("/reader")
+        upstream_path = ingress_path + self.path
         connection = http.client.HTTPConnection("127.0.0.1", reader.port, timeout=60)
         started = False
         try:
             connection.request("GET", upstream_path, headers=headers)
             upstream = connection.getresponse()
+            # Reader pages (not the article content inside them) get a link
+            # back to the manager, since the reader has no way back itself.
+            body = None
+            if (
+                upstream.status == 200
+                and upstream.getheader("Content-Type", "").startswith("text/html")
+                and not upstream.getheader("Content-Encoding")
+                and not self.path.startswith("/reader/content/")
+            ):
+                body = add_back_link(
+                    upstream.read(),
+                    self.headers.get("Accept-Language", ""),
+                    ingress_path,
+                )
             self.send_response(upstream.status)
             for key, value in upstream.getheaders():
-                if key.lower() not in HOP_BY_HOP:
-                    self.send_header(key, value)
+                if key.lower() in HOP_BY_HOP or (body is not None and key.lower() == "content-length"):
+                    continue
+                self.send_header(key, value)
+            if body is not None:
+                self.send_header("Content-Length", str(len(body)))
             self.end_headers()
             started = True
-            while chunk := upstream.read(65536):
-                self.wfile.write(chunk)
+            if body is not None:
+                self.wfile.write(body)
+            else:
+                while chunk := upstream.read(65536):
+                    self.wfile.write(chunk)
         except (OSError, http.client.HTTPException) as error:
             log(f"Reader proxy error: {error}")
             if not started:

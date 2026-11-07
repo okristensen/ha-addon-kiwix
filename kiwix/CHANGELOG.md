@@ -1,5 +1,9 @@
 # Changelog
 
+## 1.1.1
+
+- Add a floating link on the reader pages that leads back to the library and catalog.
+
 ## 1.1.0
 
 - The reader now opens inside Home Assistant (served through ingress), so it works in the
