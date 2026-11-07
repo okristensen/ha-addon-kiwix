@@ -1,5 +1,10 @@
 # Changelog
 
+## 1.2.1
+
+- The link back to the manager is now labelled "Manage content", sits at the bottom left and
+  only appears on the reader's home page.
+
 ## 1.2.0
 
 - Publish the library as `sensor.kiwix_library` (ZIM count; files, sizes, free space and

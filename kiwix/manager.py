@@ -215,10 +215,10 @@ def is_allowed_download_url(url):
 
 
 def add_back_link(html, accept_language, ingress_path):
-    """Insert a floating link back to the manager page into a reader page."""
-    label = "\u2190 Bibliotek" if accept_language.lower().startswith("da") else "\u2190 Library"
+    """Insert a floating link back to the manager page into the reader home page."""
+    label = "\u2190 Administrer indhold" if accept_language.lower().startswith("da") else "\u2190 Manage content"
     link = (
-        f'<a href="{ingress_path}/" style="position:fixed;right:12px;'
+        f'<a href="{ingress_path}/" style="position:fixed;left:12px;'
         "bottom:calc(12px + env(safe-area-inset-bottom));z-index:2147483647;"
         "padding:8px 14px;border-radius:999px;background:#03a9f4;color:#fff;"
         "font:600 14px system-ui,sans-serif;text-decoration:none;"
@@ -589,14 +589,14 @@ class Handler(BaseHTTPRequestHandler):
         try:
             connection.request("GET", upstream_path, headers=headers)
             upstream = connection.getresponse()
-            # Reader pages (not the article content inside them) get a link
-            # back to the manager, since the reader has no way back itself.
+            # Only the reader's home page gets a link back to the manager;
+            # everywhere else the reader's own navigation is enough.
             body = None
             if (
                 upstream.status == 200
                 and upstream.getheader("Content-Type", "").startswith("text/html")
                 and not upstream.getheader("Content-Encoding")
-                and not self.path.startswith("/reader/content/")
+                and self.path.split("?", 1)[0].rstrip("/") == "/reader"
             ):
                 body = add_back_link(
                     upstream.read(),
