@@ -10,9 +10,8 @@
  * Usage (use a panel view so the card fills the page):
  *
  *   type: custom:kiwix-app-card
- *   app: xxxxxxxx_kiwix   # optional; found automatically when left out
- *
- * Requires an admin user: the Supervisor API is not available to others.
+ *   app: xxxxxxxx_kiwix   # optional; found automatically when left out (needs an admin)
+ *   apps_card: true       # optional; shows the "Flere apps" card below the front page only
  */
 class KiwixAppCard extends HTMLElement {
   constructor() {
@@ -22,6 +21,7 @@ class KiwixAppCard extends HTMLElement {
     this._hass = null;
     this._started = false;
     this._timer = null;
+    this._apps = null;
     this._onResize = () => this._fit();
   }
 
@@ -31,6 +31,7 @@ class KiwixAppCard extends HTMLElement {
 
   set hass(hass) {
     this._hass = hass;
+    if (this._apps) this._apps.hass = hass;
     if (!this._started) {
       this._started = true;
       this._start();
@@ -43,6 +44,7 @@ class KiwixAppCard extends HTMLElement {
 
   disconnectedCallback() {
     clearInterval(this._timer);
+    this._apps = null;
     window.removeEventListener("resize", this._onResize);
     this._started = false;
   }
@@ -85,9 +87,39 @@ class KiwixAppCard extends HTMLElement {
       window.addEventListener("resize", this._onResize);
       requestAnimationFrame(() => this._fit());
       setTimeout(() => this._fit(), 500);
+      this._watchPage();
     } catch (error) {
       this._render(`<p class="error">Could not open Kiwix: ${error.message || error}</p>`);
     }
+  }
+
+  // The "Flere apps" card (config: apps_card: true) belongs on the front page only,
+  // so it is created here and shown while the reader is on its front page.
+  async _watchPage() {
+    const frame = this.shadowRoot.querySelector("iframe");
+    if (!frame || !this._config.apps_card) return;
+    const box = document.createElement("div");
+    box.hidden = true;
+    this.shadowRoot.appendChild(box);
+    try {
+      const helpers = await window.loadCardHelpers();
+      this._apps = await helpers.createCardElement({ type: "custom:apps-kort", ...(this._config.apps_config || {}) });
+      this._apps.hass = this._hass;
+      box.appendChild(this._apps);
+    } catch (error) {
+      return;
+    }
+    const check = () => {
+      let path = "";
+      try {
+        path = frame.contentWindow.location.pathname;
+      } catch (error) {
+        /* not readable: treat as another page */
+      }
+      box.hidden = !/\/reader\/?$/.test(path);
+    };
+    frame.addEventListener("load", check);
+    check();
   }
 
   // Fill exactly the space below the dashboard header, so the page never scrolls
