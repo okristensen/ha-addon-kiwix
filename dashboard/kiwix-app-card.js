@@ -100,6 +100,7 @@ class KiwixAppCard extends HTMLElement {
     if (!frame || !this._config.apps_card) return;
     const box = document.createElement("div");
     box.hidden = true;
+    this._box = box;
     this.shadowRoot.appendChild(box);
     try {
       const helpers = await window.loadCardHelpers();
@@ -117,7 +118,11 @@ class KiwixAppCard extends HTMLElement {
         /* not readable: treat as another page */
       }
       box.hidden = !/\/reader\/?$/.test(path);
+      this._fit();
     };
+    // The card sits under the reader, so the reader gives up that much height
+    // (the page itself never scrolls, so the card would otherwise be out of reach).
+    if (window.ResizeObserver) new ResizeObserver(() => this._fit()).observe(box);
     frame.addEventListener("load", check);
     check();
   }
@@ -128,7 +133,8 @@ class KiwixAppCard extends HTMLElement {
     const frame = this.shadowRoot.querySelector("iframe");
     if (!frame) return;
     const top = Math.max(this.getBoundingClientRect().top, 0);
-    frame.style.height = `${Math.max(Math.floor(window.innerHeight - top), 200)}px`;
+    const extra = this._box && !this._box.hidden ? Math.ceil(this._box.getBoundingClientRect().height) : 0;
+    frame.style.height = `${Math.max(Math.floor(window.innerHeight - top - extra), 200)}px`;
   }
 
   _setCookie(session) {
