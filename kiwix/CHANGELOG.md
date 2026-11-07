@@ -1,5 +1,9 @@
 # Changelog
 
+## 1.7.2
+
+- The app is now called "Opslag" everywhere it is shown (app name, sidebar panel, page titles and headings). The Kiwix catalog is still called Kiwix.
+
 ## 1.7.1
 
 - Management page: the library buttons now wrap below the file name on narrow screens instead of running off the edge.

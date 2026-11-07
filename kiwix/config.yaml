@@ -1,5 +1,5 @@
-name: Kiwix
-version: "1.7.1"
+name: Opslag
+version: "1.7.2"
 slug: kiwix
 description: Offline Wikipedia and other content, browsed and downloaded from the Kiwix catalog
 url: https://github.com/okristensen/ha-addon-kiwix
@@ -20,6 +20,6 @@ ingress: true
 ingress_port: 8099
 panel_admin: false
 panel_icon: mdi:book-open-page-variant
-panel_title: Kiwix
+panel_title: Opslag
 options: {}
 schema: {}
