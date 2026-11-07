@@ -1,5 +1,10 @@
 # Changelog
 
+## 1.3.1
+
+- Front page: fix broken cover images (falls back to the size the catalog lists) and remove the
+  extra space at the top.
+
 ## 1.3.0
 
 - New front page for the reader: your library as large cards with cover, language, article
