@@ -15,7 +15,7 @@ const STRINGS = {
     search: "Search",
     more: "Show more",
     noResults: "No results.",
-    allLanguages: "All languages",
+    inEnglish: "In English",
     allCategories: "All categories",
     download: "Download",
     installed: "Installed",
@@ -56,7 +56,7 @@ const STRINGS = {
     search: "Søg",
     more: "Vis flere",
     noResults: "Ingen resultater.",
-    allLanguages: "Alle sprog",
+    inEnglish: "På engelsk",
     allCategories: "Alle kategorier",
     download: "Hent",
     installed: "Installeret",
@@ -85,11 +85,6 @@ const STRINGS = {
   },
 };
 
-const LANGUAGES = [
-  ["", "allLanguages"], ["dan", "Dansk"], ["eng", "English"], ["swe", "Svenska"],
-  ["nob", "Norsk bokmål"], ["deu", "Deutsch"], ["fra", "Français"], ["spa", "Español"],
-  ["nld", "Nederlands"], ["ita", "Italiano"],
-];
 const CATEGORIES = [
   ["", "allCategories"], ["wikipedia", "Wikipedia"], ["wiktionary", "Wiktionary"],
   ["wikibooks", "Wikibooks"], ["wikisource", "Wikisource"], ["wikiquote", "Wikiquote"],
@@ -150,12 +145,9 @@ function applyStaticText() {
   document.querySelectorAll("[data-i18n-placeholder]").forEach((node) => {
     node.placeholder = t[node.dataset.i18nPlaceholder];
   });
-  for (const [select, options] of [[$("lang"), LANGUAGES], [$("category"), CATEGORIES]]) {
-    for (const [value, label] of options) {
-      select.append(el("option", { value, textContent: t[label] || label }));
-    }
+  for (const [value, label] of CATEGORIES) {
+    $("category").append(el("option", { value, textContent: t[label] || label }));
   }
-  $("lang").value = uiLanguage === "da" ? "dan" : "eng";
   $("category").value = "wikipedia";
 }
 
@@ -341,7 +333,7 @@ function renderResult(entry) {
 }
 
 function renderResultStates() {
-  for (const item of $("results").children) {
+  for (const item of [...$("results").children, ...$("results-en").children]) {
     const current = resultState({ file: item.dataset.file });
     item._button.disabled = current !== "available";
     item._button.textContent = current === "installed" ? t.installed
@@ -349,38 +341,56 @@ function renderResultStates() {
   }
 }
 
-async function loadCatalog(append = false) {
-  const start = append ? state.nextStart : 0;
+// Results come in your own language first, with English below it.
+const GROUPS = [
+  { lang: uiLanguage === "da" ? "dan" : "eng", list: "results", more: "more", message: "results-message", next: 0 },
+  ...(uiLanguage === "da"
+    ? [{ lang: "eng", list: "results-en", more: "more-en", message: "results-en-message", next: 0 }]
+    : []),
+];
+
+async function loadGroup(group, append) {
+  const start = append ? group.next : 0;
   const params = new URLSearchParams({
     q: $("q").value.trim(),
-    lang: $("lang").value,
+    lang: group.lang,
     category: $("category").value,
     start,
   });
-  $("results-message").textContent = "";
+  $(group.message).textContent = "";
   try {
     const result = await api(`api/catalog?${params}`);
     const items = result.entries.map(renderResult);
-    if (append) $("results").append(...items);
-    else $("results").replaceChildren(...items);
-    state.nextStart = start + result.entries.length;
-    state.total = result.total;
-    $("more").hidden = state.nextStart >= result.total || result.entries.length === 0;
-    $("results-message").textContent = $("results").children.length ? "" : t.noResults;
-    renderResultStates();
+    if (append) $(group.list).append(...items);
+    else $(group.list).replaceChildren(...items);
+    group.next = start + result.entries.length;
+    $(group.more).hidden = group.next >= result.total || result.entries.length === 0;
+    $(group.message).textContent = $(group.list).children.length ? "" : t.noResults;
   } catch (error) {
-    $("results-message").textContent = t.catalogError;
-    $("more").hidden = true;
+    $(group.message).textContent = t.catalogError;
+    $(group.more).hidden = true;
   }
+}
+
+async function loadCatalog() {
+  await Promise.all(GROUPS.map((group) => loadGroup(group, false)));
+  renderResultStates();
 }
 
 // -- start ----------------------------------------------------------------
 applyStaticText();
 $("search").addEventListener("submit", (event) => {
   event.preventDefault();
-  loadCatalog(false);
+  loadCatalog();
 });
-$("more").addEventListener("click", () => loadCatalog(true));
+for (const group of GROUPS) {
+  $(group.more).addEventListener("click", async () => {
+    await loadGroup(group, true);
+    renderResultStates();
+  });
+}
+$("results-en-title").hidden = GROUPS.length < 2;
+$("results-en-title").textContent = t.inEnglish;
 $("auto-update").addEventListener("change", async (event) => {
   await post("api/auto-update", { enabled: event.target.checked });
   refresh();
@@ -402,5 +412,5 @@ $("update-all").addEventListener("click", async () => {
 
 refresh().then(() => {
   schedulePolling();
-  loadCatalog(false);
+  loadCatalog();
 });

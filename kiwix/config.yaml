@@ -1,5 +1,5 @@
 name: Opslag
-version: "1.10.0"
+version: "1.10.1"
 slug: kiwix
 description: Offline Wikipedia and other content, browsed and downloaded from the Kiwix catalog
 url: https://github.com/okristensen/ha-addon-kiwix

@@ -1,5 +1,9 @@
 # Changelog
 
+## 1.10.1
+
+- Catalog search no longer has a language picker: results are shown in your own language first, with English results below them.
+
 ## 1.10.0
 
 - Content updates: the add-on checks the Kiwix catalog every 12 hours (and on "Check now") for newer builds of the books you have downloaded. Books with a newer build show "Update available" and an "Update" button on the management page, and administrators see an update count on the front page.
