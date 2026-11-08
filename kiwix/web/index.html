@@ -45,13 +45,16 @@
       <h2 data-i18n="catalog"></h2>
       <form id="search">
         <input type="search" id="q" data-i18n-placeholder="searchPlaceholder" autocomplete="off">
-        <select id="lang" aria-label="Language"></select>
         <select id="category" aria-label="Category"></select>
         <button class="button primary" type="submit" data-i18n="search"></button>
       </form>
       <ul class="list" id="results"></ul>
       <p class="muted" id="results-message"></p>
       <button class="button" id="more" hidden data-i18n="more"></button>
+      <h3 class="group-title" id="results-en-title" hidden></h3>
+      <ul class="list" id="results-en"></ul>
+      <p class="muted" id="results-en-message"></p>
+      <button class="button" id="more-en" hidden data-i18n="more"></button>
     </section>
   </main>
   <script src="app.js"></script>
