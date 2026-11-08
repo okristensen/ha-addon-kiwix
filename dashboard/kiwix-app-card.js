@@ -157,6 +157,9 @@ class KiwixAppCard extends HTMLElement {
   _lock() {
     try {
       const doc = this.shadowRoot.querySelector("iframe").contentDocument;
+      // The frame reaches the bottom edge of the screen, so the pages inside
+      // are told how much of it the home indicator covers (env() is 0 in a frame).
+      doc.documentElement.style.setProperty("--kiwix-sab", `${this._inset("bottom")}px`);
       doc.documentElement.style.overscrollBehavior = "none";
       if (doc.body) doc.body.style.overscrollBehavior = "none";
     } catch (error) {
@@ -166,7 +169,7 @@ class KiwixAppCard extends HTMLElement {
 
   // Pin the card to the screen, from just below the dashboard header (or the very
   // top when the header is hidden) down to the bottom edge, keeping clear of the
-  // status bar and the home indicator. Being fixed it cannot be scrolled away or
+  // status bar (the pages inside keep clear of the home indicator themselves). Being fixed it cannot be scrolled away or
   // leave a strip of the dashboard showing, however the page behind it behaves.
   // The card itself only scrolls on the front page, where the reader takes the
   // height of its content with "Flere apps" underneath; articles scroll inside
@@ -181,7 +184,7 @@ class KiwixAppCard extends HTMLElement {
     }
     const front = !!(this._box && !this._box.hidden);
     const padTop = this._top0 < 1 ? this._inset("top") : 0;
-    const padBottom = front ? 0 : this._inset("bottom");
+    const padBottom = 0;
     this.classList.toggle("front", front);
     Object.assign(this.style, {
       position: "fixed",

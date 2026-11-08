@@ -1,5 +1,9 @@
 # Changelog
 
+## 1.7.8
+
+- Articles now run all the way down to the bottom edge of the screen on iPhone; the "Forside" button stays clear of the home indicator.
+
 ## 1.7.7
 
 - The search bar at the top of articles now always stays visible, also when scrolling down.

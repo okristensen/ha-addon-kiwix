@@ -225,7 +225,7 @@ SEARCH_PAGE_CSS = """
 :root{color-scheme:light dark;--bg:#f3f5f8;--card:#fff;--text:#14181d;--muted:#66707c;--border:#e1e5ea;--accent:#ea7b0c;--accent2:#f5a524;--chip:#eef1f5}
 @media (prefers-color-scheme:dark){:root{--bg:#0f1216;--card:#1a1e24;--text:#eceff3;--muted:#8d97a3;--border:#292f37;--chip:#252b33}}
 html,body{background:var(--bg)!important;color:var(--text)!important;overscroll-behavior:none!important}
-body{margin:0!important;padding:14px 14px calc(88px + env(safe-area-inset-bottom))!important;
+body{margin:0!important;padding:14px 14px calc(88px + var(--kiwix-sab,env(safe-area-inset-bottom)))!important;
  font:16px/1.45 system-ui,-apple-system,"Segoe UI",Roboto,sans-serif!important}
 .header{font-size:14px!important;color:var(--muted)!important;margin:4px 2px 14px!important}
 .header b{color:var(--text)!important}
@@ -244,7 +244,7 @@ footer ul{display:flex!important;flex-wrap:wrap;gap:8px;justify-content:center}
 footer li a{display:block;padding:9px 15px;border-radius:12px;background:var(--card);border:1px solid var(--border);
  color:var(--text)!important;text-decoration:none!important;font-weight:600}
 #kiwix-home-bar{position:fixed;left:0;right:0;bottom:0;z-index:2147483647;display:flex;justify-content:flex-start;
- padding:10px 14px calc(10px + env(safe-area-inset-bottom));background:color-mix(in srgb,var(--bg) 82%,transparent);
+ padding:10px 14px calc(10px + var(--kiwix-sab,env(safe-area-inset-bottom)));background:color-mix(in srgb,var(--bg) 82%,transparent);
  -webkit-backdrop-filter:blur(14px);backdrop-filter:blur(14px);border-top:1px solid var(--border)}
 #kiwix-home-bar a{display:inline-flex;align-items:center;gap:6px;padding:10px 18px;border-radius:999px;color:#fff!important;
  text-decoration:none!important;font:600 15px system-ui,sans-serif;background:linear-gradient(135deg,var(--accent),var(--accent2))}
@@ -277,14 +277,14 @@ def add_home_button(html, accept_language, ingress_path, pad=True):
     snippet = (
         "<style>html,body{overscroll-behavior:none}@media (prefers-color-scheme:dark){html{background:#121317}}#kiwixtoolbar{position:fixed!important;top:0!important;left:0!important;right:0!important;transform:none!important;opacity:1!important;visibility:visible!important;z-index:2147483000!important}</style>"
         '<a id="kiwix-home-btn" href="' + ingress_path + '/reader/" style="display:none;position:fixed;left:12px;'
-        "bottom:calc(12px + env(safe-area-inset-bottom));z-index:2147483647;align-items:center;"
+        "bottom:calc(12px + var(--kiwix-sab,env(safe-area-inset-bottom)));z-index:2147483647;align-items:center;"
         "padding:10px 18px;border-radius:999px;color:#fff;text-decoration:none;"
         "font:600 15px system-ui,sans-serif;background:linear-gradient(135deg,#ea7b0c,#f5a524);"
         'box-shadow:0 4px 14px rgba(0,0,0,.3)">' + label + "</a>"
         "<script>(function(){var framed=false;"
         "try{framed=parent!==window&&/\\/reader\\/viewer/.test(parent.location.pathname)}catch(e){}"
         'if(!framed){document.getElementById("kiwix-home-btn").style.display="inline-flex";'
-        + ('document.body.style.paddingBottom="calc(76px + env(safe-area-inset-bottom))"' if pad else "")
+        + ('document.body.style.paddingBottom="calc(76px + var(--kiwix-sab,env(safe-area-inset-bottom)))"' if pad else "")
         + "}})();</script>"
     ).encode()
     index = html.lower().rfind(b"</body>")
