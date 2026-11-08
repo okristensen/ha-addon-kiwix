@@ -94,6 +94,17 @@
     .sugg a { display: flex; justify-content: space-between; gap: 12px; padding: 10px 12px; border-radius: 10px; }
     .sugg a:active, .sugg a:hover { background: var(--chip); }
     .sugg small { color: var(--muted); white-space: nowrap; }
+    .sugg.stale { opacity: .55; transition: opacity .15s; }
+    .sugg-note { padding: 10px 12px; color: var(--muted); font-size: 15px; }
+    .spin {
+      display: none; flex: none; width: 22px; height: 22px; box-sizing: border-box;
+      border: 2.5px solid var(--border); border-top-color: var(--accent); border-radius: 50%;
+      animation: spin .7s linear infinite;
+    }
+    .search form.busy .spin { display: block; }
+    .search form.busy svg { display: none; }
+    @keyframes spin { to { transform: rotate(360deg); } }
+    @media (prefers-reduced-motion: reduce) { .spin { animation-duration: 1.6s; } }
 
     h2 { margin: 30px 0 12px; font-size: 13px; text-transform: uppercase; letter-spacing: .08em; color: var(--muted); }
     .grid { list-style: none; margin: 0; padding: 0; display: grid; gap: 14px; grid-template-columns: repeat(auto-fill, minmax(260px, 1fr)); }
@@ -152,6 +163,7 @@
       <div class="search" id="searchbox" hidden>
         <form id="form" autocomplete="off">
           <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><circle cx="11" cy="11" r="7"/><path d="M20 20l-3.5-3.5"/></svg>
+          <span class="spin" aria-hidden="true"></span>
           <input id="q" type="search" enterkeyhint="search" autocapitalize="none" spellcheck="false">
           <button type="submit" data-t="search"></button>
         </form>
@@ -177,7 +189,7 @@
       emptyText: "Du har ikke hentet noget endnu.", emptyCta: "Hent indhold",
       error: "Kunne ikke læse biblioteket.", retry: "Prøv igen", powered: "Drevet af",
       fullText: "Søg efter", offline: "Virker uden internet",
-      hiddenGroup: "Skjulte bøger",
+      hiddenGroup: "Skjulte bøger", searching: "Søger…",
     },
     en: {
       manage: "Manage content", search: "Search", library: "Your library",
@@ -186,7 +198,7 @@
       emptyText: "You haven't downloaded anything yet.", emptyCta: "Get content",
       error: "Could not read the library.", retry: "Retry", powered: "Powered by",
       fullText: "Search for", offline: "Works offline",
-      hiddenGroup: "Hidden books",
+      hiddenGroup: "Hidden books", searching: "Searching…",
     },
   }[lang];
   document.documentElement.lang = lang;
@@ -357,8 +369,24 @@
   });
 
   let timer = 0, seq = 0;
+  // Loading state: a spinner replaces the magnifier and the list shows "Searching…"
+  // (or dims the previous hits) from the first keystroke until the answer is in.
+  function setBusy(on) {
+    $("form").classList.toggle("busy", on);
+    $("form").setAttribute("aria-busy", on ? "true" : "false");
+    const box = $("sugg");
+    box.classList.toggle("stale", on && !!box.querySelector("a"));
+    if (on && !box.querySelector("a")) {
+      box.innerHTML = "";
+      const li = document.createElement("li");
+      li.className = "sugg-note"; li.setAttribute("role", "status"); li.textContent = T.searching;
+      box.appendChild(li); box.hidden = false;
+    }
+  }
   function suggest() {
     clearTimeout(timer);
+    if ($("q").value.trim().length >= 2) setBusy(true);
+    else { setBusy(false); $("sugg").hidden = true; }
     timer = setTimeout(async () => {
       const q = $("q").value.trim();
       const box = $("sugg");
@@ -370,6 +398,7 @@
           .then((items) => items.filter((i) => i.path).map((i) => ({ book: b, item: i })))));
       if (mine !== seq) return;
       const hits = lists.flat().slice(0, 7);
+      setBusy(false);
       box.innerHTML = "";
       for (const { book, item } of hits) {
         const li = document.createElement("li");
