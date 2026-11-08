@@ -164,25 +164,35 @@ class KiwixAppCard extends HTMLElement {
     }
   }
 
-  // Fill exactly the space below the dashboard header (or the whole screen when
-  // the header is hidden, keeping clear of the status bar and the home indicator).
+  // Pin the card to the screen, from just below the dashboard header (or the very
+  // top when the header is hidden) down to the bottom edge, keeping clear of the
+  // status bar and the home indicator. Being fixed it cannot be scrolled away or
+  // leave a strip of the dashboard showing, however the page behind it behaves.
   // The card itself only scrolls on the front page, where the reader takes the
   // height of its content with "Flere apps" underneath; articles scroll inside
   // the frame and nothing else moves.
   _fit() {
     const frame = this.shadowRoot.querySelector("iframe");
     if (!frame) return;
-    const viewport = Math.floor(window.visualViewport ? window.visualViewport.height : window.innerHeight);
-    const rawTop = this.getBoundingClientRect().top;
-    const top = Math.max(rawTop, 0);
-    const avail = Math.max(viewport - top, 200);
+    if (this._top0 === undefined) {
+      const rect = this.getBoundingClientRect();
+      this._top0 = Math.max(rect.top, 0);
+      this._left0 = Math.max(rect.left, 0);
+    }
     const front = !!(this._box && !this._box.hidden);
-    const padTop = rawTop < 1 ? this._inset("top") : 0;
+    const padTop = this._top0 < 1 ? this._inset("top") : 0;
     const padBottom = front ? 0 : this._inset("bottom");
     this.classList.toggle("front", front);
-    this.style.height = `${avail}px`;
-    this.style.padding = `${padTop}px 0 ${padBottom}px`;
-    const room = avail - padTop - padBottom;
+    Object.assign(this.style, {
+      position: "fixed",
+      top: `${this._top0}px`,
+      left: `${this._left0}px`,
+      right: "0",
+      bottom: "0",
+      height: "auto",
+      padding: `${padTop}px 0 ${padBottom}px`,
+    });
+    const room = Math.max(this.clientHeight - padTop - padBottom, 200);
     let height = room;
     if (front) {
       let content = 0;
