@@ -34,7 +34,7 @@
       background: var(--bg);
       color: var(--text);
       font: 16px/1.45 system-ui, -apple-system, "Segoe UI", Roboto, sans-serif;
-      padding: 0 0 env(safe-area-inset-bottom);
+      padding: 0 0 var(--kiwix-sab, env(safe-area-inset-bottom));
     }
     a { color: inherit; text-decoration: none; }
     .wrap { max-width: 980px; margin: 0 auto; padding: 0 16px 40px; }
@@ -51,6 +51,27 @@
     .manage svg { width: 18px; height: 18px; }
 
     .hero { text-align: center; padding: 28px 0 8px; }
+    /* The search row sticks to the top when the page scrolls; the logo shrinks into it. */
+    #sentinel { height: 1px; margin-bottom: -1px; }
+    .stick {
+      position: sticky; top: 0; z-index: 20; display: flex; align-items: center; gap: 0;
+      margin: 0 -16px; padding: 10px 16px;
+      background: color-mix(in srgb, var(--bg) 88%, transparent);
+      -webkit-backdrop-filter: blur(14px); backdrop-filter: blur(14px);
+      border-bottom: 1px solid transparent; transition: border-color .2s;
+    }
+    .stick:has(.search[hidden]) { display: none; }
+    .stick.stuck { border-bottom-color: var(--border); }
+    .mini-logo {
+      flex: none; width: 0; height: 40px; opacity: 0; overflow: hidden; border-radius: 12px; color: #fff;
+      display: grid; place-items: center; pointer-events: none;
+      background: linear-gradient(135deg, var(--accent), var(--accent-2));
+      transition: width .2s, opacity .2s, margin .2s;
+    }
+    .mini-logo svg { width: 22px; height: 22px; }
+    .stick.stuck .mini-logo { width: 40px; opacity: 1; margin-right: 12px; pointer-events: auto; }
+    .stick .search { flex: 1; min-width: 0; margin: 0 auto; }
+    .stick .sugg { top: calc(100% + 4px); }
     .logo {
       width: 64px; height: 64px; margin: 0 auto 10px; border-radius: 20px;
       display: grid; place-items: center; color: #fff;
@@ -78,7 +99,9 @@
       color: #fff; font: inherit; font-weight: 600; font-size: 15px;
       background: linear-gradient(135deg, var(--accent), var(--accent-2));
     }
-    .scopes { display: flex; gap: 8px; justify-content: center; flex-wrap: wrap; margin-top: 12px; }
+    .scopes { display: flex; gap: 8px; justify-content: center; flex-wrap: wrap; margin-top: 4px; }
+    .scopes:empty { display: none; }
+    body:has(#apps-slot > *) { padding-bottom: 0; }
     .scope {
       border: 1px solid var(--border); background: var(--card); color: var(--muted);
       border-radius: 999px; padding: 6px 12px; font: inherit; font-size: 13px; cursor: pointer;
@@ -159,7 +182,13 @@
       </div>
       <h1>Opslag</h1>
       <p class="sub" id="sub"></p>
+    </section>
 
+    <div id="sentinel" aria-hidden="true"></div>
+    <div class="stick" id="stick">
+      <a class="mini-logo" href="#" id="to-top" aria-label="Opslag">
+        <svg viewBox="0 0 24 24" fill="currentColor"><path d="M19 2l-5 4.5v11l5-4.5V2M6.5 5C4.55 5 2.45 5.4 1 6.5v14.66c0 .25.25.5.5.5.1 0 .15-.07.25-.07C3.1 20.94 5.05 20.5 6.5 20.5c1.95 0 4.05.4 5.5 1.5 1.35-.85 3.8-1.5 5.5-1.5 1.65 0 3.35.31 4.75 1.06.1.05.15.03.25.03.25 0 .5-.25.5-.5V6.5c-.6-.45-1.25-.75-2-1V19c-1.1-.35-2.3-.5-3.5-.5-1.7 0-4.15.65-5.5 1.5V6.5C10.55 5.4 8.45 5 6.5 5z"/></svg>
+      </a>
       <div class="search" id="searchbox" hidden>
         <form id="form" autocomplete="off">
           <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><circle cx="11" cy="11" r="7"/><path d="M20 20l-3.5-3.5"/></svg>
@@ -169,14 +198,15 @@
         </form>
         <ul class="sugg" id="sugg" hidden></ul>
       </div>
-      <div class="scopes" id="scopes"></div>
-    </section>
+    </div>
+    <div class="scopes" id="scopes"></div>
 
     <h2 data-t="library"></h2>
     <ul class="grid" id="grid"><li class="skeleton"></li><li class="skeleton"></li></ul>
 
     <footer><span data-t="powered"></span> <a href="https://kiwix.org" target="_blank" rel="noopener">Kiwix</a></footer>
   </div>
+  <div id="apps-slot"></div>
 
 <script>
 (() => {
@@ -187,7 +217,7 @@
       placeholder: "Søg i alt dit indhold", all: "Alt",
       articles: "artikler", books1: "1 bog", booksN: "bøger", sub0: "Intet indhold endnu",
       emptyText: "Du har ikke hentet noget endnu.", emptyCta: "Hent indhold",
-      error: "Kunne ikke læse biblioteket.", retry: "Prøv igen", powered: "Drevet af",
+      error: "Kunne ikke læse biblioteket.", retry: "Prøv igen", powered: "Indhold leveret af",
       fullText: "Søg efter", offline: "Virker uden internet",
       hiddenGroup: "Skjulte bøger", searching: "Søger…",
     },
@@ -196,7 +226,7 @@
       placeholder: "Search all your content", all: "All",
       articles: "articles", books1: "1 book", booksN: "books", sub0: "No content yet",
       emptyText: "You haven't downloaded anything yet.", emptyCta: "Get content",
-      error: "Could not read the library.", retry: "Retry", powered: "Powered by",
+      error: "Could not read the library.", retry: "Retry", powered: "Content provided by",
       fullText: "Search for", offline: "Works offline",
       hiddenGroup: "Hidden books", searching: "Searching…",
     },
@@ -414,6 +444,13 @@
   }
   $("q").addEventListener("input", suggest);
   document.addEventListener("click", (ev) => { if (!ev.target.closest(".search")) $("sugg").hidden = true; });
+
+  const stick = $("stick");
+  if (window.IntersectionObserver) {
+    new IntersectionObserver(([e]) => stick.classList.toggle("stuck", !e.isIntersecting && e.boundingClientRect.top < 0))
+      .observe($("sentinel"));
+  }
+  $("to-top").addEventListener("click", (ev) => { ev.preventDefault(); window.scrollTo({ top: 0, behavior: "smooth" }); });
 
   load();
 })();

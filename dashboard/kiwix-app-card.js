@@ -115,12 +115,41 @@ class KiwixAppCard extends HTMLElement {
     }
     const check = () => {
       let path = "";
+      let doc = null;
       try {
         path = frame.contentWindow.location.pathname;
+        doc = frame.contentDocument;
       } catch (error) {
         /* not readable: treat as another page */
       }
-      box.hidden = !/\/reader\/?$/.test(path);
+      const front = /\/reader\/?$/.test(path);
+      this._inFrame = false;
+      // On the front page the "Flere apps" card is moved into the page itself, at the
+      // end of its content, so the page scrolls inside the frame and its search bar can
+      // stick to the top. If the page has no place for it, the card scrolls instead.
+      const slot = front && doc ? doc.getElementById("apps-slot") : null;
+      if (slot) {
+        try {
+          slot.appendChild(box);
+          box.hidden = false;
+          this._inFrame = true;
+          frame.contentWindow.addEventListener(
+            "pagehide",
+            () => {
+              this._inFrame = false;
+              box.hidden = true;
+              this.shadowRoot.appendChild(box);
+            },
+            { once: true }
+          );
+        } catch (error) {
+          this._inFrame = false;
+        }
+      }
+      if (!this._inFrame) {
+        if (box.parentNode !== this.shadowRoot) this.shadowRoot.appendChild(box);
+        box.hidden = !front;
+      }
       watchBody();
       this._fit();
     };
@@ -182,7 +211,7 @@ class KiwixAppCard extends HTMLElement {
       this._top0 = Math.max(rect.top, 0);
       this._left0 = Math.max(rect.left, 0);
     }
-    const front = !!(this._box && !this._box.hidden);
+    const front = !!(this._box && !this._box.hidden) && !this._inFrame;
     const padTop = this._top0 < 1 ? this._inset("top") : 0;
     const padBottom = 0;
     this.classList.toggle("front", front);

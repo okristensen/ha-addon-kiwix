@@ -1,5 +1,10 @@
 # Changelog
 
+## 1.8.1
+
+- Front page: the search bar now sticks to the top when you scroll, and the big logo shrinks into a small one beside it.
+- The footer now says "Indhold leveret af Kiwix" ("Content provided by Kiwix") instead of "Drevet af".
+
 ## 1.8.0
 
 - Loading state for search suggestions: while suggestions are being fetched, the front page search shows a spinner and "Søger…" in the list, and the search bar in articles shows a spinner.
