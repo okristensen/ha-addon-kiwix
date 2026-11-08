@@ -247,7 +247,7 @@
       emptyText: "Du har ikke hentet noget endnu.", emptyCta: "Hent indhold",
       error: "Kunne ikke læse biblioteket.", retry: "Prøv igen", powered: "Indhold leveret af",
       fullText: "Søg efter", offline: "Virker uden internet",
-      updatesN: "opdateringer", update1: "1 opdatering", hiddenGroup: "Skjulte bøger", searching: "Søger…", bookmarks: "Bogmærker", removeBm: "Fjern bogmærke",
+      updatesN: "opdateringer", update1: "1 opdatering", hiddenGroup: "Skjulte bøger", searching: "Søger…", inEnglish: "På engelsk", bookmarks: "Bogmærker", removeBm: "Fjern bogmærke",
     },
     en: {
       manage: "Manage content", search: "Search", library: "Your library",
@@ -256,7 +256,7 @@
       emptyText: "You haven't downloaded anything yet.", emptyCta: "Get content",
       error: "Could not read the library.", retry: "Retry", powered: "Content provided by",
       fullText: "Search for", offline: "Works offline",
-      updatesN: "updates", update1: "1 update", hiddenGroup: "Hidden books", searching: "Searching…", bookmarks: "Bookmarks", removeBm: "Remove bookmark",
+      updatesN: "updates", update1: "1 update", hiddenGroup: "Hidden books", searching: "Searching…", inEnglish: "In English", bookmarks: "Bookmarks", removeBm: "Remove bookmark",
     },
   }[lang];
   document.documentElement.lang = lang;
@@ -381,25 +381,9 @@
     const scopes = $("scopes");
     scopes.innerHTML = "";
     if (books.length > 1) {
-      const ls = langs();
-      let options;
-      if (ls.length <= 1) {
-        options = [{ name: null, title: T.all }, ...books];
-      } else {
-        options = [];
-        for (const l of ls) {
-          if (books.filter((b) => (b.lang || "") === l).length > 1) {
-            options.push({ name: `lang:${l}`, title: `${T.all} · ${l ? langName(l) : "?"}` });
-          }
-        }
-        options.push(...books);
-        if (!options.some((o) => o.name === scope)) {
-          const own = options.find((o) => o.name && o.name.startsWith("lang:") && o.name.slice(5, 7) === lang);
-          scope = (own || options[0]).name;
-        }
-      }
+      const options = [{ name: null, title: T.all }, ...books];
       for (const b of options) {
-        const twin = b.name && !b.name.startsWith("lang:") && books.some((o) => o !== b && o.title === b.title);
+        const twin = b.name && books.some((o) => o !== b && o.title === b.title);
         const s = document.createElement("button");
         s.type = "button"; s.className = "scope";
         s.textContent = twin && b.lang ? `${b.title} · ${langName(b.lang)}` : b.title;
@@ -410,23 +394,33 @@
     }
   }
 
-  // Kiwix refuses a search across books in different languages, so with mixed
-  // languages "all" means all books in one language (scope "lang:xx").
-  const langs = () => [...new Set(books.map((b) => b.lang || ""))];
+  // Kiwix refuses a search across books in different languages, so "all" means
+  // your own language first, with the English books searched separately and
+  // shown below the hits.
+  const sameLang = (b, code) => (b.lang || "").slice(0, 2) === code;
   const scoped = () => {
-    if (scope && scope.startsWith("lang:")) return books.filter((b) => (b.lang || "") === scope.slice(5));
-    return scope ? books.filter((b) => b.name === scope) : books;
+    if (scope) return { main: books.filter((b) => b.name === scope), extra: [] };
+    const langs = new Set(books.map((b) => b.lang || ""));
+    if (langs.size <= 1) return { main: books, extra: [] };
+    const own = books.filter((b) => sameLang(b, lang));
+    const en = books.filter((b) => sameLang(b, "en"));
+    if (own.length && !own.every((b) => sameLang(b, "en"))) return { main: own, extra: en };
+    if (en.length) return { main: en, extra: [] };
+    const first = books[0].lang || "";
+    return { main: books.filter((b) => (b.lang || "") === first), extra: [] };
   };
 
   $("form").addEventListener("submit", (ev) => {
     ev.preventDefault();
     const q = $("q").value.trim();
     if (!q) return;
-    const sel = scoped();
+    const { main: sel, extra } = scoped();
     const params = new URLSearchParams();
     if (sel.length === 1) params.set("content", sel[0].id);
     else sel.forEach((b) => params.append("books.name", b.id));
     params.set("pattern", q);
+    // The search page adds the English hits below its own (see add_back_link).
+    if (extra.length) params.set("xen", extra.map((b) => b.id).join(","));
     location.href = `search?${params}`;
   });
 
@@ -454,15 +448,23 @@
       const box = $("sugg");
       const mine = ++seq;
       if (q.length < 2) { box.hidden = true; return; }
-      const lists = await Promise.all(scoped().map((b) =>
+      const { main, extra } = scoped();
+      const fetchHits = (list) => Promise.all(list.map((b) =>
         fetch(`suggest?content=${encodeURIComponent(b.id)}&term=${encodeURIComponent(q)}&count=5`)
           .then((r) => (r.ok ? r.json() : [])).catch(() => [])
           .then((items) => items.filter((i) => i.path).map((i) => ({ book: b, item: i })))));
+      const [mainLists, extraLists] = await Promise.all([fetchHits(main), fetchHits(extra)]);
       if (mine !== seq) return;
-      const hits = lists.flat().slice(0, 7);
+      const mainHits = mainLists.flat().slice(0, extra.length ? 5 : 7);
+      const extraHits = extraLists.flat().slice(0, 3);
+      const hits = [...mainHits, ...extraHits];
       setBusy(false);
       box.innerHTML = "";
       for (const { book, item } of hits) {
+        if (extraHits.length && item === extraHits[0].item) {
+          const note = document.createElement("li");
+          note.className = "sugg-note"; note.textContent = T.inEnglish; box.appendChild(note);
+        }
         const li = document.createElement("li");
         const a = document.createElement("a");
         a.href = `viewer#${encodeURIComponent(book.id)}/${item.path.split("/").map(encodeURIComponent).join("/")}`;
