@@ -1,5 +1,9 @@
 # Changelog
 
+## 1.11.2
+
+- Documentation rewritten for the app's current name and features (English first); clearer store description.
+
 ## 1.11.1
 
 - Article buttons: back is now bottom left, the former "Forside" button is called "Hjem" (with a house icon) and sits in the middle, and the bookmark star stays on the right. The search results page uses the same "Hjem" button.

@@ -1,7 +1,7 @@
 name: Opslag
-version: "1.11.1"
+version: "1.11.2"
 slug: kiwix
-description: Offline Wikipedia and other content, browsed and downloaded from the Kiwix catalog
+description: Offline Wikipedia and more – download from the Kiwix catalog, read, search and bookmark, kept up to date
 url: https://github.com/okristensen/ha-addon-kiwix
 arch:
   - aarch64
@@ -14,7 +14,7 @@ map:
 ports:
   8080/tcp: 8080
 ports_description:
-  8080/tcp: Kiwix reader
+  8080/tcp: Opslag reader
 homeassistant_api: true
 ingress: true
 ingress_port: 8099
