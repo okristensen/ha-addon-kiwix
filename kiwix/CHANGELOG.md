@@ -1,5 +1,10 @@
 # Changelog
 
+## 1.7.6
+
+- Fixes the app configuration, which was empty in 1.7.5 so that the update could not be installed.
+- Articles in dark mode now have a dark page background behind the text, so no white strip shows at the bottom while scrolling fast.
+
 ## 1.7.5
 
 - The app is now pinned to the screen on iPhone, so no strip of the dashboard shows at the bottom while scrolling.

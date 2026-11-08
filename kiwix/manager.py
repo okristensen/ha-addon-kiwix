@@ -275,7 +275,7 @@ def add_home_button(html, accept_language, ingress_path, pad=True):
     """
     label = "\u2190 Forside" if accept_language.lower().startswith("da") else "\u2190 Home"
     snippet = (
-        "<style>html,body{overscroll-behavior:none}</style>"
+        "<style>html,body{overscroll-behavior:none}@media (prefers-color-scheme:dark){html{background:#121317}}</style>"
         '<a id="kiwix-home-btn" href="' + ingress_path + '/reader/" style="display:none;position:fixed;left:12px;'
         "bottom:calc(12px + env(safe-area-inset-bottom));z-index:2147483647;align-items:center;"
         "padding:10px 18px;border-radius:999px;color:#fff;text-decoration:none;"
