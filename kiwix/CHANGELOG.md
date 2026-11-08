@@ -1,5 +1,11 @@
 # Changelog
 
+## 1.10.0
+
+- Content updates: the add-on checks the Kiwix catalog every 12 hours (and on "Check now") for newer builds of the books you have downloaded. Books with a newer build show "Update available" and an "Update" button on the management page, and administrators see an update count on the front page.
+- Optional "Update automatically": new builds are downloaded when there is room for them (the old file stays until the new one is complete), then the old file is deleted. Bookmarks and the hidden flag move to the new build.
+- A Home Assistant notification is created when updates are found, and `sensor.kiwix_library` gets `updates` and `auto_update` attributes. The setting is stored in `.settings.json` in the library folder.
+
 ## 1.9.1
 
 - The "Flere apps" card at the bottom of the front page now has the same card look and margins as the books, which fixes the sideways scrolling.
