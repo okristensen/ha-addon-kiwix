@@ -222,9 +222,9 @@ def is_allowed_download_url(url):
 
 
 SEARCH_PAGE_CSS = """
-:root{color-scheme:light dark;--bg:#f3f5f8;--card:#fff;--text:#14181d;--muted:#66707c;--border:#e1e5ea;--accent:#0a8ee8;--accent2:#5b6cf0;--chip:#eef1f5}
+:root{color-scheme:light dark;--bg:#f3f5f8;--card:#fff;--text:#14181d;--muted:#66707c;--border:#e1e5ea;--accent:#ea7b0c;--accent2:#f5a524;--chip:#eef1f5}
 @media (prefers-color-scheme:dark){:root{--bg:#0f1216;--card:#1a1e24;--text:#eceff3;--muted:#8d97a3;--border:#292f37;--chip:#252b33}}
-html,body{background:var(--bg)!important;color:var(--text)!important}
+html,body{background:var(--bg)!important;color:var(--text)!important;overscroll-behavior:none!important}
 body{margin:0!important;padding:14px 14px calc(88px + env(safe-area-inset-bottom))!important;
  font:16px/1.45 system-ui,-apple-system,"Segoe UI",Roboto,sans-serif!important}
 .header{font-size:14px!important;color:var(--muted)!important;margin:4px 2px 14px!important}
@@ -275,10 +275,11 @@ def add_home_button(html, accept_language, ingress_path, pad=True):
     """
     label = "\u2190 Forside" if accept_language.lower().startswith("da") else "\u2190 Home"
     snippet = (
+        "<style>html,body{overscroll-behavior:none}</style>"
         '<a id="kiwix-home-btn" href="' + ingress_path + '/reader/" style="display:none;position:fixed;left:12px;'
         "bottom:calc(12px + env(safe-area-inset-bottom));z-index:2147483647;align-items:center;"
         "padding:10px 18px;border-radius:999px;color:#fff;text-decoration:none;"
-        "font:600 15px system-ui,sans-serif;background:linear-gradient(135deg,#0a8ee8,#5b6cf0);"
+        "font:600 15px system-ui,sans-serif;background:linear-gradient(135deg,#ea7b0c,#f5a524);"
         'box-shadow:0 4px 14px rgba(0,0,0,.3)">' + label + "</a>"
         "<script>(function(){var framed=false;"
         "try{framed=parent!==window&&/\\/reader\\/viewer/.test(parent.location.pathname)}catch(e){}"

@@ -46,6 +46,7 @@ class KiwixAppCard extends HTMLElement {
     clearInterval(this._timer);
     this._apps = null;
     window.removeEventListener("resize", this._onResize);
+    if (window.visualViewport) window.visualViewport.removeEventListener("resize", this._onResize);
     this._started = false;
   }
 
@@ -85,6 +86,8 @@ class KiwixAppCard extends HTMLElement {
 
       this._render(`<iframe src="${info.ingress_url}reader/" allow="fullscreen"></iframe>`);
       window.addEventListener("resize", this._onResize);
+      if (window.visualViewport) window.visualViewport.addEventListener("resize", this._onResize);
+      this.shadowRoot.querySelector("iframe").addEventListener("load", () => this._lock());
       requestAnimationFrame(() => this._fit());
       setTimeout(() => this._fit(), 500);
       this._watchPage();
@@ -139,17 +142,48 @@ class KiwixAppCard extends HTMLElement {
     check();
   }
 
-  // Fill exactly the space below the dashboard header. The card itself scrolls
-  // (the dashboard page does not): on the front page the reader takes the height
-  // of its content with "Flere apps" underneath, elsewhere it fills the space.
+  // The size of the device's safe area (notch, home indicator) on one side, in px.
+  _inset(side) {
+    const probe = document.createElement("div");
+    probe.style.cssText = `position:fixed;visibility:hidden;pointer-events:none;padding-${side}:env(safe-area-inset-${side},0px)`;
+    document.body.appendChild(probe);
+    const px = parseFloat(getComputedStyle(probe)[`padding${side[0].toUpperCase()}${side.slice(1)}`]) || 0;
+    probe.remove();
+    return px;
+  }
+
+  // Stop the page inside the frame from bouncing or handing its scroll on to the
+  // dashboard behind it, so nothing but the text moves when the user scrolls.
+  _lock() {
+    try {
+      const doc = this.shadowRoot.querySelector("iframe").contentDocument;
+      doc.documentElement.style.overscrollBehavior = "none";
+      if (doc.body) doc.body.style.overscrollBehavior = "none";
+    } catch (error) {
+      /* not readable */
+    }
+  }
+
+  // Fill exactly the space below the dashboard header (or the whole screen when
+  // the header is hidden, keeping clear of the status bar and the home indicator).
+  // The card itself only scrolls on the front page, where the reader takes the
+  // height of its content with "Flere apps" underneath; articles scroll inside
+  // the frame and nothing else moves.
   _fit() {
     const frame = this.shadowRoot.querySelector("iframe");
     if (!frame) return;
-    const top = Math.max(this.getBoundingClientRect().top, 0);
-    const avail = Math.max(Math.floor(window.innerHeight - top), 200);
+    const viewport = Math.floor(window.visualViewport ? window.visualViewport.height : window.innerHeight);
+    const rawTop = this.getBoundingClientRect().top;
+    const top = Math.max(rawTop, 0);
+    const avail = Math.max(viewport - top, 200);
+    const front = !!(this._box && !this._box.hidden);
+    const padTop = rawTop < 1 ? this._inset("top") : 0;
+    const padBottom = front ? 0 : this._inset("bottom");
+    this.classList.toggle("front", front);
     this.style.height = `${avail}px`;
-    const front = this._box && !this._box.hidden;
-    let height = avail;
+    this.style.padding = `${padTop}px 0 ${padBottom}px`;
+    const room = avail - padTop - padBottom;
+    let height = room;
     if (front) {
       let content = 0;
       try {
@@ -157,7 +191,7 @@ class KiwixAppCard extends HTMLElement {
       } catch (error) {
         /* not readable */
       }
-      height = Math.max(content, avail - Math.ceil(this._box.getBoundingClientRect().height));
+      height = Math.max(content, room - Math.ceil(this._box.getBoundingClientRect().height));
     }
     frame.style.height = `${height}px`;
   }
@@ -170,13 +204,18 @@ class KiwixAppCard extends HTMLElement {
   _render(body) {
     this.shadowRoot.innerHTML = `
       <style>
-        :host { display: block; overflow-x: hidden; overflow-y: auto; -webkit-overflow-scrolling: touch; }
+        :host {
+          display: block; box-sizing: border-box; overflow-x: hidden; overflow-y: hidden;
+          overscroll-behavior: none; background: var(--kiwix-bg, #f3f5f8);
+        }
+        @media (prefers-color-scheme: dark) { :host { --kiwix-bg: #0f1216; } }
+        :host(.front) { overflow-y: auto; -webkit-overflow-scrolling: touch; }
         iframe {
           display: block;
           width: 100%;
           height: calc(100vh - var(--header-height, 56px) - env(safe-area-inset-top, 0px));
           border: 0;
-          background: var(--primary-background-color);
+          background: var(--kiwix-bg, #f3f5f8);
         }
         .error { padding: 16px; color: var(--error-color, #d93025); }
       </style>

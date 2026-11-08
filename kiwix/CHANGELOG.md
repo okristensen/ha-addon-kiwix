@@ -1,5 +1,11 @@
 # Changelog
 
+## 1.7.4
+
+- Steadier scrolling in the app on iPhone: the page no longer bounces or drags the dashboard behind it along, and articles no longer slide under the status bar.
+- The empty white strip at the bottom of the app now has the same colour as the page.
+- The "Forside" button on articles and search results is orange like the rest of the app, instead of blue.
+
 ## 1.7.3
 
 - The app now uses orange (logo, buttons, chips and focus colour) to match its icon in the family apps, instead of blue.
