@@ -38,6 +38,7 @@ from pathlib import Path
 LIBRARY_DIR = Path(os.environ.get("KIWIX_LIBRARY_DIR", "/share/kiwix"))
 QUEUE_FILE = LIBRARY_DIR / ".downloads.json"
 HIDDEN_FILE = LIBRARY_DIR / ".hidden.json"
+BOOKMARKS_FILE = LIBRARY_DIR / ".bookmarks.json"
 CATALOG_URL = os.environ.get(
     "KIWIX_CATALOG_URL", "https://library.kiwix.org/catalog/v2/entries"
 )
@@ -265,6 +266,62 @@ def add_back_link(html, accept_language, ingress_path):
     return html[:index] + bar + html[index:]
 
 
+BOOKMARK_SNIPPET = r"""<style>
+#kiwix-bm{position:fixed;right:12px;bottom:calc(12px + var(--kiwix-sab,env(safe-area-inset-bottom)));z-index:2147483647;width:41px;height:41px;
+ border-radius:50%;border:0;padding:0;display:grid;place-items:center;cursor:pointer;background:#fff;color:#ea7b0c;box-shadow:0 4px 14px rgba(0,0,0,.3)}
+@media (prefers-color-scheme:dark){#kiwix-bm{background:#252b33}}
+#kiwix-bm[hidden]{display:none}
+#kiwix-bm svg{width:22px;height:22px;fill:none;stroke:currentColor;stroke-width:2;stroke-linejoin:round}
+#kiwix-bm.on svg{fill:currentColor}
+#kiwix-bm-toast{position:fixed;right:12px;bottom:calc(64px + var(--kiwix-sab,env(safe-area-inset-bottom)));z-index:2147483647;
+ background:rgba(20,24,29,.92);color:#fff;font:600 14px system-ui,sans-serif;padding:8px 14px;border-radius:999px;opacity:0;
+ transform:translateY(6px);transition:opacity .2s,transform .2s;pointer-events:none}
+#kiwix-bm-toast.show{opacity:1;transform:none}
+</style>
+<button id="kiwix-bm" type="button" hidden aria-pressed="false"><svg viewBox="0 0 24 24"><path d="M12 3.5l2.6 5.3 5.9.9-4.3 4.1 1 5.8-5.2-2.8-5.2 2.8 1-5.8-4.3-4.1 5.9-.9z"/></svg></button>
+<div id="kiwix-bm-toast" role="status" aria-live="polite"></div>
+<script>(function(){
+var API=__API__,L=__LABELS__;
+var framed=false;try{framed=parent!==window&&/\/reader\/viewer/.test(parent.location.pathname)}catch(e){}
+if(framed)return;
+var btn=document.getElementById("kiwix-bm"),toast=document.getElementById("kiwix-bm-toast"),items=[],tt=0;
+function cur(){
+ var p=location.pathname,m,book,path,title;
+ try{
+  if(/\/reader\/viewer\/?$/.test(p)&&location.hash.length>1){
+   m=decodeURIComponent(location.hash.slice(1)).split("/");book=m.shift();path=m.join("/");
+   try{var f=document.querySelector("iframe");title=f&&f.contentDocument&&f.contentDocument.title}catch(e){}
+  }else if((m=p.match(/\/content\/([^\/]+)\/(.+)$/))){book=m[1];path=decodeURIComponent(m[2]);title=document.title}
+ }catch(e){return null}
+ if(!book||!path)return null;
+ return{book:book,path:path,title:String(title||path.split("/").pop()).trim()}}
+function has(c){return items.some(function(b){return b.book===c.book&&b.path===c.path})}
+function show(){var c=cur();btn.hidden=!c;if(!c)return;var on=has(c);
+ btn.classList.toggle("on",on);btn.setAttribute("aria-pressed",on?"true":"false");btn.setAttribute("aria-label",on?L.remove:L.add)}
+function load(){fetch(API).then(function(r){return r.json()}).then(function(d){items=d.bookmarks||[];show()}).catch(show)}
+function say(t){toast.textContent=t;toast.classList.add("show");clearTimeout(tt);tt=setTimeout(function(){toast.classList.remove("show")},1600)}
+btn.addEventListener("click",function(){var c=cur();if(!c)return;var on=!has(c);
+ items=items.filter(function(b){return!(b.book===c.book&&b.path===c.path)});if(on)items.unshift(c);show();say(on?L.added:L.removed);
+ fetch(API,{method:"POST",headers:{"Content-Type":"application/json"},body:JSON.stringify({action:on?"add":"remove",book:c.book,path:c.path,title:c.title})})
+  .then(function(r){if(!r.ok)throw 0}).catch(function(){say(L.failed);load()})});
+addEventListener("hashchange",show);addEventListener("pageshow",load);load();
+})();</script>"""
+
+BOOKMARK_LABELS = {
+    "da": {"add": "Tilføj bogmærke", "remove": "Fjern bogmærke", "added": "Gemt i bogmærker", "removed": "Bogmærke fjernet", "failed": "Kunne ikke gemme"},
+    "en": {"add": "Add bookmark", "remove": "Remove bookmark", "added": "Saved to bookmarks", "removed": "Bookmark removed", "failed": "Could not save"},
+}
+
+
+def bookmark_snippet(accept_language, ingress_path):
+    labels = BOOKMARK_LABELS["da" if accept_language.lower().startswith("da") else "en"]
+    return (
+        BOOKMARK_SNIPPET.replace("__API__", json.dumps(ingress_path + "/api/bookmarks"))
+        .replace("__LABELS__", json.dumps(labels))
+        .encode()
+    )
+
+
 def add_home_button(html, accept_language, ingress_path, pad=True):
     """Add a floating "front page" button, bottom left, to a reader page.
 
@@ -288,7 +345,7 @@ def add_home_button(html, accept_language, ingress_path, pad=True):
         'if(!framed){document.getElementById("kiwix-home-btn").style.display="inline-flex";'
         + ('document.body.style.paddingBottom="calc(76px + var(--kiwix-sab,env(safe-area-inset-bottom)))"' if pad else "")
         + "}})();</script>"
-    ).encode()
+    ).encode() + bookmark_snippet(accept_language, ingress_path)
     index = html.lower().rfind(b"</body>")
     if index == -1:
         return html + snippet
@@ -721,6 +778,44 @@ def set_hidden(file, hidden):
     HIDDEN_FILE.write_text(json.dumps(sorted(current)))
 
 
+BOOK_ID_RE = re.compile(r"[A-Za-z0-9._-]{1,120}")
+_bookmarks_lock = threading.Lock()
+
+
+def _read_bookmarks():
+    try:
+        data = json.loads(BOOKMARKS_FILE.read_text())
+        return data if isinstance(data, dict) else {}
+    except (OSError, ValueError):
+        return {}
+
+
+def get_bookmarks(user):
+    """The bookmarks of one Home Assistant user, newest first."""
+    with _bookmarks_lock:
+        items = _read_bookmarks().get(user or "_", [])
+    return items if isinstance(items, list) else []
+
+
+def change_bookmark(user, action, book, path, title):
+    """Add or remove one bookmark (an article in a book) for a user."""
+    if action not in ("add", "remove"):
+        raise ValueError("Unknown action")
+    if not BOOK_ID_RE.fullmatch(book) or not path or len(path) > 500:
+        raise ValueError("Invalid bookmark")
+    key = user or "_"
+    with _bookmarks_lock:
+        data = _read_bookmarks()
+        items = [b for b in data.get(key, []) if not (b.get("book") == book and b.get("path") == path)]
+        if action == "add":
+            items.insert(0, {"book": book, "path": path, "title": title.strip()[:200] or path, "added": int(time.time())})
+        data[key] = items[:500]
+        BOOKMARKS_FILE.parent.mkdir(parents=True, exist_ok=True)
+        temp = BOOKMARKS_FILE.with_suffix(".tmp")
+        temp.write_text(json.dumps(data))
+        os.replace(temp, BOOKMARKS_FILE)
+
+
 def library_state():
     files = []
     hidden = hidden_books()
@@ -793,6 +888,8 @@ class Handler(BaseHTTPRequestHandler):
             self._json(200, library_state())
         elif route == "/api/me":
             self._json(200, {"admin": self._is_admin(), **self._network()})
+        elif route == "/api/bookmarks":
+            self._json(200, {"bookmarks": get_bookmarks(self.headers.get("X-Remote-User-Id", "").strip())})
         elif route == "/api/catalog":
             if self._is_admin():
                 self._catalog(urllib.parse.parse_qs(parsed.query))
@@ -815,6 +912,26 @@ class Handler(BaseHTTPRequestHandler):
         if not self._guard():
             return
         route = "/" + urllib.parse.urlparse(self.path).path.strip("/")
+        if route == "/api/bookmarks":
+            # Bookmarks belong to the person using the app, not only to administrators.
+            body = self._body()
+            try:
+                change_bookmark(
+                    self.headers.get("X-Remote-User-Id", "").strip(),
+                    str(body.get("action", "")),
+                    str(body.get("book", "")),
+                    str(body.get("path", "")),
+                    str(body.get("title", "")),
+                )
+            except ValueError as error:
+                self._json(400, {"error": str(error)})
+                return
+            except OSError as error:
+                log(f"Could not save bookmarks: {error}")
+                self._json(500, {"error": "Could not save the bookmark"})
+                return
+            self._json(200, {"ok": True})
+            return
         if not self._is_admin():
             self._json(403, {"error": "Administrators only"})
             return
