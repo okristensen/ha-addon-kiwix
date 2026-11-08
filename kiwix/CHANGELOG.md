@@ -1,5 +1,9 @@
 # Changelog
 
+## 1.7.5
+
+- The app is now pinned to the screen on iPhone, so no strip of the dashboard shows at the bottom while scrolling.
+
 ## 1.7.4
 
 - Steadier scrolling in the app on iPhone: the page no longer bounces or drags the dashboard behind it along, and articles no longer slide under the status bar.
