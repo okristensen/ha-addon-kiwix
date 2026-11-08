@@ -1,5 +1,9 @@
 # Changelog
 
+## 1.8.0
+
+- Loading state for search suggestions: while suggestions are being fetched, the front page search shows a spinner and "Søger…" in the list, and the search bar in articles shows a spinner.
+
 ## 1.7.9
 
 - The top of an article is no longer hidden under the search bar: the page makes room for the bar, whatever its height.
