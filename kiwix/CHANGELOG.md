@@ -1,5 +1,9 @@
 # Changelog
 
+## 1.7.7
+
+- The search bar at the top of articles now always stays visible, also when scrolling down.
+
 ## 1.7.6
 
 - Fixes the app configuration, which was empty in 1.7.5 so that the update could not be installed.
