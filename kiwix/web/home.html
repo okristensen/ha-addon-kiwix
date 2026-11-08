@@ -102,6 +102,19 @@
     .scopes { display: flex; gap: 8px; justify-content: center; flex-wrap: wrap; margin-top: 4px; }
     .scopes:empty { display: none; }
     body:has(#apps-slot > *) { padding-bottom: 0; }
+    .bm { list-style: none; margin: 0; padding: 0; display: grid; gap: 8px; }
+    .bm li {
+      display: flex; align-items: center; gap: 6px; background: var(--card); border: 1px solid var(--border);
+      border-radius: 16px; box-shadow: var(--shadow);
+    }
+    .bm a.bm-link { flex: 1; min-width: 0; display: flex; flex-direction: column; padding: 11px 6px 11px 16px; }
+    .bm .bm-title { font-weight: 600; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+    .bm .bm-book { color: var(--muted); font-size: 13px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+    .bm button {
+      flex: none; width: 44px; height: 44px; margin-right: 4px; border: 0; border-radius: 12px; cursor: pointer;
+      background: none; color: var(--muted); font-size: 22px; line-height: 1;
+    }
+    .bm button:active { background: var(--chip); }
     .scope {
       border: 1px solid var(--border); background: var(--card); color: var(--muted);
       border-radius: 999px; padding: 6px 12px; font: inherit; font-size: 13px; cursor: pointer;
@@ -201,6 +214,11 @@
     </div>
     <div class="scopes" id="scopes"></div>
 
+    <section id="bm-section" hidden>
+      <h2 data-t="bookmarks"></h2>
+      <ul class="bm" id="bm"></ul>
+    </section>
+
     <h2 data-t="library"></h2>
     <ul class="grid" id="grid"><li class="skeleton"></li><li class="skeleton"></li></ul>
 
@@ -219,7 +237,7 @@
       emptyText: "Du har ikke hentet noget endnu.", emptyCta: "Hent indhold",
       error: "Kunne ikke læse biblioteket.", retry: "Prøv igen", powered: "Indhold leveret af",
       fullText: "Søg efter", offline: "Virker uden internet",
-      hiddenGroup: "Skjulte bøger", searching: "Søger…",
+      hiddenGroup: "Skjulte bøger", searching: "Søger…", bookmarks: "Bogmærker", removeBm: "Fjern bogmærke",
     },
     en: {
       manage: "Manage content", search: "Search", library: "Your library",
@@ -228,7 +246,7 @@
       emptyText: "You haven't downloaded anything yet.", emptyCta: "Get content",
       error: "Could not read the library.", retry: "Retry", powered: "Content provided by",
       fullText: "Search for", offline: "Works offline",
-      hiddenGroup: "Hidden books", searching: "Searching…",
+      hiddenGroup: "Hidden books", searching: "Searching…", bookmarks: "Bookmarks", removeBm: "Remove bookmark",
     },
   }[lang];
   document.documentElement.lang = lang;
@@ -445,6 +463,37 @@
   $("q").addEventListener("input", suggest);
   document.addEventListener("click", (ev) => { if (!ev.target.closest(".search")) $("sugg").hidden = true; });
 
+  // Bookmarks: the articles each person has starred (stored per Home Assistant user).
+  let bookmarks = [];
+  function renderBookmarks() {
+    const ul = $("bm");
+    ul.innerHTML = "";
+    $("bm-section").hidden = bookmarks.length === 0;
+    for (const b of bookmarks) {
+      const li = document.createElement("li");
+      const a = document.createElement("a");
+      a.className = "bm-link";
+      a.href = `viewer#${encodeURIComponent(b.book)}/${b.path.split("/").map(encodeURIComponent).join("/")}`;
+      const t = document.createElement("span"); t.className = "bm-title"; t.textContent = b.title || b.path;
+      const book = books.concat(hiddenBooks).find((x) => x.id === b.book);
+      const s = document.createElement("span"); s.className = "bm-book"; s.textContent = book ? book.title : b.book;
+      a.append(t, s);
+      const x = document.createElement("button");
+      x.type = "button"; x.textContent = "×"; x.setAttribute("aria-label", T.removeBm);
+      x.onclick = () => {
+        bookmarks = bookmarks.filter((y) => y !== b); renderBookmarks();
+        fetch("../api/bookmarks", { method: "POST", headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ action: "remove", book: b.book, path: b.path, title: b.title }) }).catch(() => {});
+      };
+      li.append(a, x); ul.appendChild(li);
+    }
+  }
+  function loadBookmarks() {
+    fetch("../api/bookmarks").then((r) => (r.ok ? r.json() : { bookmarks: [] }))
+      .then((d) => { bookmarks = d.bookmarks || []; renderBookmarks(); }).catch(() => {});
+  }
+  window.addEventListener("pageshow", loadBookmarks);
+
   const stick = $("stick");
   if (window.IntersectionObserver) {
     new IntersectionObserver(([e]) => stick.classList.toggle("stuck", !e.isIntersecting && e.boundingClientRect.top < 0))
@@ -452,7 +501,7 @@
   }
   $("to-top").addEventListener("click", (ev) => { ev.preventDefault(); window.scrollTo({ top: 0, behavior: "smooth" }); });
 
-  load();
+  load().then(loadBookmarks);
 })();
 </script>
 </body>

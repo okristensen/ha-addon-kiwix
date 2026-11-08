@@ -1,5 +1,10 @@
 # Changelog
 
+## 1.9.0
+
+- Bookmarks: a star button at the bottom right of every article (next to "Forside") saves it to your bookmarks, and tapping it again removes it.
+- The front page lists your bookmarks above the library, with a button to remove each one. Bookmarks are stored per Home Assistant user in `.bookmarks.json` in the library folder, so they follow you between devices.
+
 ## 1.8.1
 
 - Front page: the search bar now sticks to the top when you scroll, and the big logo shrinks into a small one beside it.
