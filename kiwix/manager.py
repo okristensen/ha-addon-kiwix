@@ -246,13 +246,18 @@ footer ul{display:flex!important;flex-wrap:wrap;gap:8px;justify-content:center}
 footer li a{display:block;padding:9px 15px;border-radius:12px;background:var(--card);border:1px solid var(--border);
  color:var(--text)!important;text-decoration:none!important;font-weight:600}
 .kiwix-en-title{margin:26px 2px 10px;font-size:13px;font-weight:700;letter-spacing:.06em;text-transform:uppercase;color:var(--muted)}
-#kiwix-home-bar{position:fixed;left:0;right:0;bottom:0;z-index:2147483647;display:flex;justify-content:flex-start;
+#kiwix-home-bar{position:fixed;left:0;right:0;bottom:0;z-index:2147483647;display:flex;justify-content:center;
  padding:10px 14px calc(10px + var(--kiwix-sab,env(safe-area-inset-bottom)));background:color-mix(in srgb,var(--bg) 82%,transparent);
  -webkit-backdrop-filter:blur(14px);backdrop-filter:blur(14px);border-top:1px solid var(--border)}
 #kiwix-home-bar a{display:inline-flex;align-items:center;gap:6px;padding:10px 18px;border-radius:999px;color:#fff!important;
  text-decoration:none!important;font:600 15px system-ui,sans-serif;background:linear-gradient(135deg,var(--accent),var(--accent2))}
 """
 
+
+HOME_ICON = (
+    '<svg viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" stroke-width="2.2" '
+    'stroke-linecap="round" stroke-linejoin="round" style="margin-right:7px"><path d="M3 11l9-8 9 8v9a1 1 0 0 1-1 1h-5v-6H9v6H4a1 1 0 0 1-1-1z"/></svg>'
+)
 
 # Adds the hits from the English books below the hits in your own language. The
 # front page passes their ids in "xen" because Kiwix cannot search across languages.
@@ -274,7 +279,7 @@ fetch("search?"+u).then(function(r){return r.ok?r.text():""}).then(function(h){
 
 def add_back_link(html, accept_language, ingress_path):
     """Style a search result page like the front page and add a bar leading back to it."""
-    label = "\u2190 Forside" if accept_language.lower().startswith("da") else "\u2190 Home"
+    label = HOME_ICON + ("Hjem" if accept_language.lower().startswith("da") else "Home")
     style = ("<style>" + SEARCH_PAGE_CSS + "</style>").encode()
     bar = f'<div id="kiwix-home-bar"><a href="{ingress_path}/reader/">{label}</a></div>'.encode()
     title = "P\u00e5 engelsk" if accept_language.lower().startswith("da") else "In English"
@@ -352,16 +357,16 @@ def add_home_button(html, accept_language, ingress_path, pad=True):
     browser by looking at the parent page; the reader itself may sit in an
     iframe in the Home Assistant dashboard, so "framed" alone is not enough).
     """
-    label = "\u2190 Forside" if accept_language.lower().startswith("da") else "\u2190 Home"
+    label = HOME_ICON + ("Hjem" if accept_language.lower().startswith("da") else "Home")
     back_label = "Tilbage" if accept_language.lower().startswith("da") else "Back"
     snippet = (
         "<style>html,body{overscroll-behavior:none}@media (prefers-color-scheme:dark){html{background:#121317}}#kiwixtoolbar{position:fixed!important;top:0!important;left:0!important;right:0!important;transform:none!important;opacity:1!important;visibility:visible!important;z-index:2147483000!important}html{scroll-padding-top:var(--kiwix-tbh,0px)}body{padding-top:var(--kiwix-tbh,0px)!important}.height_separator{display:none!important}#kiwix-spin{position:absolute;right:8px;top:50%;width:16px;height:16px;margin-top:-8px;box-sizing:border-box;border:2px solid rgba(128,128,128,.35);border-top-color:#ea7b0c;border-radius:50%;display:none;z-index:3;pointer-events:none;animation:kiwix-spin .7s linear infinite}.kiwix-busy #kiwix-spin{display:block}@keyframes kiwix-spin{to{transform:rotate(360deg)}}</style>"
-        '<a id="kiwix-home-btn" href="' + ingress_path + '/reader/" style="display:none;position:fixed;left:12px;'
+        '<a id="kiwix-home-btn" href="' + ingress_path + '/reader/" style="display:none;position:fixed;left:50%;transform:translateX(-50%);'
         "bottom:calc(12px + var(--kiwix-sab,env(safe-area-inset-bottom)));z-index:2147483647;align-items:center;"
         "padding:10px 18px;border-radius:999px;color:#fff;text-decoration:none;"
         "font:600 15px system-ui,sans-serif;background:linear-gradient(135deg,#ea7b0c,#f5a524);"
         'box-shadow:0 4px 14px rgba(0,0,0,.3)">' + label + "</a>"
-        '<button id="kiwix-back-btn" type="button" aria-label="' + back_label + '" style="display:none;position:fixed;left:140px;'
+        '<button id="kiwix-back-btn" type="button" aria-label="' + back_label + '" style="display:none;position:fixed;left:12px;'
         "bottom:calc(12px + var(--kiwix-sab,env(safe-area-inset-bottom)));z-index:2147483647;width:41px;height:41px;"
         "border-radius:50%;border:0;padding:0;place-items:center;cursor:pointer;background:#fff;color:#ea7b0c;"
         'box-shadow:0 4px 14px rgba(0,0,0,.3)"><svg viewBox="0 0 24 24" width="22" height="22" fill="none" stroke="currentColor" '
@@ -372,7 +377,7 @@ def add_home_button(html, accept_language, ingress_path, pad=True):
         "<script>(function(){var framed=false;"
         "try{framed=parent!==window&&/\\/reader\\/viewer/.test(parent.location.pathname)}catch(e){}"
         'if(!framed){var hb=document.getElementById("kiwix-home-btn"),bb=document.getElementById("kiwix-back-btn");hb.style.display="inline-flex";'
-        'bb.style.display="grid";bb.style.left=(hb.offsetWidth+20)+"px";'
+        'bb.style.display="grid";'
         'bb.onclick=function(){if(history.length>1)history.back();else location.href=hb.href};'
         + ('document.body.style.paddingBottom="calc(76px + var(--kiwix-sab,env(safe-area-inset-bottom)))"' if pad else "")
         + "}})();</script>"
