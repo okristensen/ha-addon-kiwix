@@ -1,5 +1,10 @@
 # Changelog
 
+## 1.11.0
+
+- Front page: no more choosing a language for search. "Alle" searches your own language first, and the English books are searched separately and shown below ("På engelsk"), both in the suggestions and on the search results page. The single books are still listed for searching just one.
+- Articles have a round back button next to "Forside".
+
 ## 1.10.1
 
 - Catalog search no longer has a language picker: results are shown in your own language first, with English results below them.
