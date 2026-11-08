@@ -23,6 +23,18 @@ const STRINGS = {
     cancel: "Cancel",
     dismiss: "Dismiss",
     remove: "Delete",
+    updates: "Updates",
+    updateAvailable: "Update available",
+    updateBtn: "Update ({size})",
+    updateAll: "Update all",
+    updating: "Updating…",
+    autoUpdate: "Update automatically",
+    autoUpdateHint: "New versions are downloaded when there is room, and the old one is deleted afterwards. Bookmarks move along.",
+    checkNow: "Check now",
+    checking: "Checking…",
+    lastChecked: "Last checked {time}",
+    neverChecked: "Not checked yet",
+    upToDate: "Everything is up to date.",
     shown: "Shown on front page",
     hiddenLabel: "Hidden from front page",
     confirmDelete: "Delete {file}?",
@@ -52,6 +64,18 @@ const STRINGS = {
     cancel: "Annuller",
     dismiss: "Luk",
     remove: "Slet",
+    updates: "Opdateringer",
+    updateAvailable: "Opdatering tilgængelig",
+    updateBtn: "Opdatér ({size})",
+    updateAll: "Opdatér alle",
+    updating: "Opdaterer…",
+    autoUpdate: "Opdatér automatisk",
+    autoUpdateHint: "Nye versioner hentes, når der er plads, og den gamle slettes bagefter. Bogmærker følger med.",
+    checkNow: "Tjek nu",
+    checking: "Tjekker…",
+    lastChecked: "Sidst tjekket {time}",
+    neverChecked: "Endnu ikke tjekket",
+    upToDate: "Alt er opdateret.",
     shown: "Vises på forsiden",
     hiddenLabel: "Skjult på forsiden",
     confirmDelete: "Slet {file}?",
@@ -78,7 +102,7 @@ const t = STRINGS[uiLanguage];
 document.documentElement.lang = uiLanguage;
 
 const $ = (id) => document.getElementById(id);
-const state = { library: [], downloads: [], nextStart: 0, total: 0 };
+const state = { library: [], downloads: [], updates: { items: [] }, nextStart: 0, total: 0 };
 
 // -- helpers ------------------------------------------------------------
 function el(tag, props = {}, ...children) {
@@ -157,8 +181,31 @@ function renderState() {
   $("downloads-section").hidden = state.downloads.length === 0;
   $("downloads").replaceChildren(...state.downloads.map(renderDownload));
 
+  renderUpdates();
   $("library-empty").hidden = state.library.length > 0;
   $("library").replaceChildren(...state.library.map(renderInstalled));
+}
+
+function updateFor(file) {
+  return (state.updates.items || []).find((u) => u.file === file);
+}
+
+function updatePending(update) {
+  return state.downloads.some((job) => job.file === update.new_file && job.status !== "error");
+}
+
+function renderUpdates() {
+  const u = state.updates;
+  const items = u.items || [];
+  $("auto-update").checked = !!u.auto_update;
+  $("check-now").disabled = !!u.checking;
+  $("check-now").textContent = u.checking ? t.checking : t.checkNow;
+  $("update-all").hidden = items.filter((i) => !updatePending(i)).length < 2;
+  const when = u.checked
+    ? t.lastChecked.replace("{time}", new Date(u.checked * 1000).toLocaleString(uiLanguage,
+        { day: "numeric", month: "short", hour: "2-digit", minute: "2-digit" }))
+    : t.neverChecked;
+  $("update-status").textContent = `${when}${u.checked && !items.length ? ` · ${t.upToDate}` : ""}`;
 }
 
 function renderDownload(job) {
@@ -187,12 +234,27 @@ function renderDownload(job) {
 }
 
 function renderInstalled(item) {
+  const update = updateFor(item.file);
+  const pending = update && updatePending(update);
   return el(
     "li",
     { class: "item" },
     el("div", {}, el("div", { class: "title", textContent: item.file }),
-      el("div", { class: "meta", textContent: formatSize(item.size) })),
+      el("div", { class: "meta", textContent: formatSize(item.size) }),
+      update ? el("div", { class: "meta update-note" },
+        el("span", { class: "badge", textContent: t.updateAvailable }),
+        ` ${update.new_file}`) : null),
     el("div", { class: "actions" },
+      update ? el("button", {
+        class: "button primary",
+        disabled: pending,
+        textContent: pending ? t.updating : t.updateBtn.replace("{size}", formatSize(update.size)),
+        onclick: async (event) => {
+          event.target.disabled = true;
+          try { await post("api/update", { file: item.file }); } catch (error) { alert(error.message); }
+          refresh();
+        },
+      }) : null,
       el("button", {
         class: "button",
         textContent: item.hidden ? t.hiddenLabel : t.shown,
@@ -319,6 +381,24 @@ $("search").addEventListener("submit", (event) => {
   loadCatalog(false);
 });
 $("more").addEventListener("click", () => loadCatalog(true));
+$("auto-update").addEventListener("change", async (event) => {
+  await post("api/auto-update", { enabled: event.target.checked });
+  refresh();
+});
+$("check-now").addEventListener("click", async () => {
+  $("check-now").disabled = true;
+  await post("api/update-check", {});
+  // The check runs in the background; poll until it has finished.
+  for (let i = 0; i < 40; i++) {
+    await new Promise((r) => setTimeout(r, 1500));
+    await refresh();
+    if (!state.updates.checking) break;
+  }
+});
+$("update-all").addEventListener("click", async () => {
+  await post("api/update-all", {});
+  refresh();
+});
 
 refresh().then(() => {
   schedulePolling();

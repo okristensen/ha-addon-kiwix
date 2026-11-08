@@ -25,6 +25,17 @@
     </section>
 
     <section>
+      <h2 data-i18n="updates"></h2>
+      <div class="update-bar">
+        <label class="switch"><input type="checkbox" id="auto-update"> <span data-i18n="autoUpdate"></span></label>
+        <button class="button" id="check-now" data-i18n="checkNow"></button>
+        <button class="button primary" id="update-all" data-i18n="updateAll" hidden></button>
+      </div>
+      <p class="muted" id="update-status"></p>
+      <p class="muted" data-i18n="autoUpdateHint"></p>
+    </section>
+
+    <section>
       <h2 data-i18n="library"></h2>
       <ul class="list" id="library"></ul>
       <p class="muted" id="library-empty" data-i18n="libraryEmpty" hidden></p>

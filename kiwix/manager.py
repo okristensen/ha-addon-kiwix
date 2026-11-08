@@ -39,6 +39,7 @@ LIBRARY_DIR = Path(os.environ.get("KIWIX_LIBRARY_DIR", "/share/kiwix"))
 QUEUE_FILE = LIBRARY_DIR / ".downloads.json"
 HIDDEN_FILE = LIBRARY_DIR / ".hidden.json"
 BOOKMARKS_FILE = LIBRARY_DIR / ".bookmarks.json"
+SETTINGS_FILE = LIBRARY_DIR / ".settings.json"
 CATALOG_URL = os.environ.get(
     "KIWIX_CATALOG_URL", "https://library.kiwix.org/catalog/v2/entries"
 )
@@ -528,6 +529,10 @@ class DownloadManager:
             return
         part.rename(LIBRARY_DIR / job.file)
         log(f"Downloaded {job.file}")
+        try:
+            updates.after_install(job.file)
+        except Exception as error:  # noqa: BLE001 - the new book is installed either way
+            log(f"Could not finish the update of {job.file}: {error}")
         self._finish(job)
         restart_servers()
 
@@ -608,6 +613,12 @@ def sensor_payload():
             "free_space_gb": round(shutil.disk_usage(LIBRARY_DIR).free / GIB, 1),
             "reader_running": kiwix.running,
             "downloads": active,
+            "updates": [
+                {"file": i["file"], "new_file": i["new_file"], "title": i["title"],
+                 "size_gb": round(i["size"] / GIB, 2)}
+                for i in updates.snapshot()["items"]
+            ],
+            "auto_update": updates.settings()["auto_update"],
         },
     }
 
@@ -630,6 +641,252 @@ def publish_sensor():
         urllib.request.urlopen(request, timeout=10).close()
     except Exception as error:  # noqa: BLE001 - best effort, report once per failure
         log(f"Could not update {SENSOR_ENTITY}: {error}")
+
+
+# --------------------------------------------------------------------------
+# Content updates
+# --------------------------------------------------------------------------
+# Kiwix publishes new builds of its books (a new date in the file name). Every
+# local ``<name>_<YYYY-MM>.zim`` is compared with the catalog; a newer build is
+# offered as an update, and downloaded automatically when auto-update is on.
+# When the new file is in place the old one is removed, and bookmarks and the
+# hidden flag move over to the new book.
+CHECK_FIRST = 120
+CHECK_EVERY = 12 * 3600
+
+
+def split_zim_name(filename):
+    match = ZIM_NAME_RE.fullmatch(filename)
+    return (match.group(1), match.group(2)) if match else (None, None)
+
+
+def pick_update(local_file, entries):
+    """The newest catalog entry of the same book that is newer than ``local_file``."""
+    base, date = split_zim_name(local_file)
+    if not base:
+        return None
+    best = None
+    for entry in entries:
+        entry_base, entry_date = split_zim_name(entry["file"])
+        if entry_base == base and entry_date > date and (best is None or entry_date > best[0]):
+            best = (entry_date, entry)
+    return best[1] if best else None
+
+
+def read_json(path, default):
+    try:
+        data = json.loads(path.read_text())
+        return data if isinstance(data, type(default)) else default
+    except (OSError, ValueError):
+        return default
+
+
+def write_json(path, data):
+    path.parent.mkdir(parents=True, exist_ok=True)
+    temp = path.with_suffix(".tmp")
+    temp.write_text(json.dumps(data))
+    os.replace(temp, path)
+
+
+def rename_book_everywhere(old_file, new_file):
+    """Point bookmarks and the hidden flag at the new build of a book."""
+    old_id, new_id = old_file[:-4], new_file[:-4]
+    with _bookmarks_lock:
+        data = _read_bookmarks()
+        changed = False
+        for items in data.values():
+            for item in items if isinstance(items, list) else []:
+                if item.get("book") == old_id:
+                    item["book"] = new_id
+                    changed = True
+        if changed:
+            write_json(BOOKMARKS_FILE, data)
+    hidden = hidden_books()
+    if old_file in hidden:
+        hidden.discard(old_file)
+        hidden.add(new_file)
+        write_json(HIDDEN_FILE, sorted(hidden))
+
+
+class UpdateChecker:
+    def __init__(self):
+        self._lock = threading.Lock()
+        self.available = {}  # local file -> update info
+        self.checked = 0
+        self.error = ""
+        self.running = False
+
+    # -- settings ---------------------------------------------------------
+    def settings(self):
+        data = read_json(SETTINGS_FILE, {})
+        return {
+            "auto_update": bool(data.get("auto_update")),
+            "replace": data.get("replace") if isinstance(data.get("replace"), dict) else {},
+            "notified": data.get("notified") if isinstance(data.get("notified"), list) else [],
+        }
+
+    def save(self, **changes):
+        with self._lock:
+            data = self.settings()
+            data.update(changes)
+            write_json(SETTINGS_FILE, data)
+
+    def set_auto(self, enabled):
+        self.save(auto_update=bool(enabled))
+        if enabled:
+            threading.Thread(target=self.check, daemon=True).start()
+
+    # -- checking ---------------------------------------------------------
+    def snapshot(self):
+        local = {path.name for path in kiwix.zim_files()}
+        with self._lock:
+            items = [dict(info) for name, info in self.available.items() if name in local]
+        return {
+            "items": items,
+            "checked": self.checked,
+            "checking": self.running,
+            "error": self.error,
+            "auto_update": self.settings()["auto_update"],
+        }
+
+    def check(self):
+        """Ask the catalog about every installed book. Safe to call from any thread."""
+        if self.running:
+            return
+        self.running = True
+        found, error = {}, ""
+        try:
+            local = [path.name for path in kiwix.zim_files()]
+            installed = set(local)
+            for name in local:
+                base, _date = split_zim_name(name)
+                if not base:
+                    continue
+                try:
+                    params = {"name": base, "count": 50}
+                    request = urllib.request.Request(
+                        f"{CATALOG_URL}?{urllib.parse.urlencode(params)}",
+                        headers={"User-Agent": USER_AGENT},
+                    )
+                    with urllib.request.urlopen(request, timeout=30) as response:
+                        _total, entries = parse_catalog(response.read())
+                except Exception as exc:  # noqa: BLE001 - one book failing must not stop the rest
+                    error = f"{base}: {exc}"
+                    log(f"Update check failed for {base}: {exc}")
+                    continue
+                entry = pick_update(name, entries)
+                if entry and entry["file"] not in installed:
+                    found[name] = {
+                        "file": name,
+                        "new_file": entry["file"],
+                        "url": entry["url"],
+                        "size": entry["size"],
+                        "title": entry["title"],
+                        "updated": entry["updated"],
+                    }
+        finally:
+            with self._lock:
+                self.available = found
+                self.checked = int(time.time())
+                self.error = error
+            self.running = False
+        log(f"Update check done: {len(found)} update(s) available")
+        self.notify_and_auto()
+        publish_sensor()
+
+    def notify_and_auto(self):
+        settings = self.settings()
+        auto = settings["auto_update"]
+        fresh = []
+        for info in list(self.available.values()):
+            if auto and self._try_start(info):
+                continue
+            if info["new_file"] not in settings["notified"]:
+                fresh.append(info)
+        if fresh:
+            names = ", ".join(info["title"] or info["new_file"] for info in fresh)
+            if notify_ha("Opslag: opdatering tilgængelig", f"Nyt indhold fra Kiwix: {names}. Åbn Opslag for at opdatere."):
+                self.save(notified=(settings["notified"] + [i["new_file"] for i in fresh])[-200:])
+
+    def _try_start(self, info):
+        """Queue one update if there is room for it next to the downloads already queued."""
+        queued = sum(
+            max(job["total"] - job["done"], 0)
+            for job in downloads.snapshot()
+            if job["status"] != "error"
+        )
+        if any(j["file"] == info["new_file"] for j in downloads.snapshot()):
+            return True
+        free = shutil.disk_usage(LIBRARY_DIR).free
+        # The old file stays until the new one is complete, so both must fit.
+        if info["size"] and free < queued + info["size"] + SPACE_MARGIN:
+            return False
+        try:
+            self.start_update(info["file"])
+            return True
+        except ValueError:
+            return False
+
+    # -- updating ---------------------------------------------------------
+    def start_update(self, local_file):
+        with self._lock:
+            info = self.available.get(local_file)
+        if info is None:
+            raise ValueError("No update available")
+        replace = self.settings()["replace"]
+        replace[info["new_file"]] = local_file
+        self.save(replace=replace)
+        try:
+            downloads.start(info["url"], info["size"])
+        except ValueError:
+            replace.pop(info["new_file"], None)
+            self.save(replace=replace)
+            raise
+
+    def after_install(self, new_file):
+        """Called when ``new_file`` has been downloaded: retire the book it replaces."""
+        replace = self.settings()["replace"]
+        old_file = replace.pop(new_file, None)
+        if not old_file:
+            return
+        self.save(replace=replace)
+        rename_book_everywhere(old_file, new_file)
+        (LIBRARY_DIR / old_file).unlink(missing_ok=True)
+        with self._lock:
+            self.available.pop(old_file, None)
+        log(f"Updated {old_file} -> {new_file}")
+        notify_ha("Opslag: opdateret", f"{new_file} er hentet, og den gamle version er fjernet.")
+
+    def loop(self):
+        time.sleep(CHECK_FIRST)
+        while True:
+            try:
+                self.check()
+            except Exception as error:  # noqa: BLE001 - keep the loop alive
+                log(f"Update check crashed: {error}")
+            time.sleep(CHECK_EVERY)
+
+
+def notify_ha(title, message):
+    """Create a persistent notification in Home Assistant. Best effort."""
+    token = os.environ.get("SUPERVISOR_TOKEN")
+    if not token:
+        return False
+    try:
+        request = urllib.request.Request(
+            f"{HA_API_URL}/services/persistent_notification/create",
+            data=json.dumps({"title": title, "message": message, "notification_id": "kiwix_update"}).encode(),
+            headers={"Authorization": f"Bearer {token}", "Content-Type": "application/json"},
+            method="POST",
+        )
+        urllib.request.urlopen(request, timeout=10).close()
+        return True
+    except Exception as error:  # noqa: BLE001
+        log(f"Could not send notification: {error}")
+        return False
+
+
+updates = UpdateChecker()
 
 
 # --------------------------------------------------------------------------
@@ -830,6 +1087,7 @@ def library_state():
         "free": shutil.disk_usage(LIBRARY_DIR).free,
         "library": files,
         "downloads": downloads.snapshot(),
+        "updates": updates.snapshot(),
     }
 
 
@@ -943,6 +1201,18 @@ class Handler(BaseHTTPRequestHandler):
                 downloads.cancel(str(body.get("file", "")))
             elif route == "/api/delete":
                 self._delete(str(body.get("file", "")))
+            elif route == "/api/update":
+                updates.start_update(str(body.get("file", "")))
+            elif route == "/api/update-all":
+                for info in updates.snapshot()["items"]:
+                    try:
+                        updates.start_update(info["file"])
+                    except ValueError:
+                        pass
+            elif route == "/api/update-check":
+                threading.Thread(target=updates.check, daemon=True).start()
+            elif route == "/api/auto-update":
+                updates.set_auto(bool(body.get("enabled")))
             elif route == "/api/visibility":
                 set_hidden(str(body.get("file", "")), bool(body.get("hidden")))
             else:
@@ -1106,6 +1376,7 @@ def main():
     restart_servers()
     downloads.resume()
     threading.Thread(target=watchdog, daemon=True).start()
+    threading.Thread(target=updates.loop, daemon=True).start()
 
     log(f"Manager listening on port {MANAGER_PORT}, library in {LIBRARY_DIR}")
     server.serve_forever()

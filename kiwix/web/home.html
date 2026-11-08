@@ -48,6 +48,8 @@
       font-size: 14px; font-weight: 600;
     }
     .manage[hidden] { display: none; }
+    .manage .upd { padding: 2px 8px; border-radius: 999px; background: linear-gradient(135deg,#ea7b0c,#f5a524); color: #fff; font-size: 12px; }
+    .manage .upd[hidden] { display: none; }
     .manage svg { width: 18px; height: 18px; }
 
     .hero { text-align: center; padding: 28px 0 8px; }
@@ -193,6 +195,7 @@
       <a class="manage" href="../" id="manage" hidden>
         <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M15 18l-6-6 6-6"/></svg>
         <span data-t="manage"></span>
+        <span class="upd" id="manage-updates" hidden></span>
       </a>
     </div>
 
@@ -244,7 +247,7 @@
       emptyText: "Du har ikke hentet noget endnu.", emptyCta: "Hent indhold",
       error: "Kunne ikke læse biblioteket.", retry: "Prøv igen", powered: "Indhold leveret af",
       fullText: "Søg efter", offline: "Virker uden internet",
-      hiddenGroup: "Skjulte bøger", searching: "Søger…", bookmarks: "Bogmærker", removeBm: "Fjern bogmærke",
+      updatesN: "opdateringer", update1: "1 opdatering", hiddenGroup: "Skjulte bøger", searching: "Søger…", bookmarks: "Bogmærker", removeBm: "Fjern bogmærke",
     },
     en: {
       manage: "Manage content", search: "Search", library: "Your library",
@@ -253,7 +256,7 @@
       emptyText: "You haven't downloaded anything yet.", emptyCta: "Get content",
       error: "Could not read the library.", retry: "Retry", powered: "Content provided by",
       fullText: "Search for", offline: "Works offline",
-      hiddenGroup: "Hidden books", searching: "Searching…", bookmarks: "Bookmarks", removeBm: "Remove bookmark",
+      updatesN: "updates", update1: "1 update", hiddenGroup: "Hidden books", searching: "Searching…", bookmarks: "Bookmarks", removeBm: "Remove bookmark",
     },
   }[lang];
   document.documentElement.lang = lang;
@@ -287,6 +290,10 @@
         fetch("../api/me").then((r) => (r.ok ? r.json() : { admin: false })).catch(() => ({ admin: false })),
       ]);
       $("manage").hidden = !me.admin;
+      const pending = me.admin && state && state.updates ? state.updates.items.length : 0;
+      const badge = $("manage-updates");
+      badge.hidden = !pending;
+      badge.textContent = pending === 1 ? T.update1 : `${pending} ${T.updatesN}`;
       const doc = new DOMParser().parseFromString(feed, "text/xml");
       const files = state ? state.library : [];
       const all = Array.from(doc.getElementsByTagName("entry")).map((entry) => {

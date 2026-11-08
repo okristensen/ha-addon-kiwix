@@ -103,3 +103,8 @@ progress { grid-column: 1 / -1; width: 100%; height: 8px; accent-color: var(--ac
 
 #more { display: block; margin: 16px auto 0; }
 [hidden] { display: none !important; }
+
+.update-bar { display: flex; flex-wrap: wrap; align-items: center; gap: 10px; }
+.update-bar .switch { display: inline-flex; align-items: center; gap: 8px; margin-right: auto; }
+.update-bar input[type=checkbox] { width: 18px; height: 18px; padding: 0; accent-color: var(--accent); }
+.update-note { margin-top: 4px; }
