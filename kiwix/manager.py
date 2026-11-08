@@ -275,12 +275,13 @@ def add_home_button(html, accept_language, ingress_path, pad=True):
     """
     label = "\u2190 Forside" if accept_language.lower().startswith("da") else "\u2190 Home"
     snippet = (
-        "<style>html,body{overscroll-behavior:none}@media (prefers-color-scheme:dark){html{background:#121317}}#kiwixtoolbar{position:fixed!important;top:0!important;left:0!important;right:0!important;transform:none!important;opacity:1!important;visibility:visible!important;z-index:2147483000!important}</style>"
+        "<style>html,body{overscroll-behavior:none}@media (prefers-color-scheme:dark){html{background:#121317}}#kiwixtoolbar{position:fixed!important;top:0!important;left:0!important;right:0!important;transform:none!important;opacity:1!important;visibility:visible!important;z-index:2147483000!important}html{scroll-padding-top:var(--kiwix-tbh,0px)}body{padding-top:var(--kiwix-tbh,0px)!important}.height_separator{display:none!important}</style>"
         '<a id="kiwix-home-btn" href="' + ingress_path + '/reader/" style="display:none;position:fixed;left:12px;'
         "bottom:calc(12px + var(--kiwix-sab,env(safe-area-inset-bottom)));z-index:2147483647;align-items:center;"
         "padding:10px 18px;border-radius:999px;color:#fff;text-decoration:none;"
         "font:600 15px system-ui,sans-serif;background:linear-gradient(135deg,#ea7b0c,#f5a524);"
         'box-shadow:0 4px 14px rgba(0,0,0,.3)">' + label + "</a>"
+        "<script>(function(){function f(){var b=document.getElementById(\"kiwixtoolbar\");document.documentElement.style.setProperty(\"--kiwix-tbh\",(b?b.offsetHeight:0)+\"px\")}f();addEventListener(\"load\",f);addEventListener(\"resize\",f);setInterval(f,700)})();</script>"
         "<script>(function(){var framed=false;"
         "try{framed=parent!==window&&/\\/reader\\/viewer/.test(parent.location.pathname)}catch(e){}"
         'if(!framed){document.getElementById("kiwix-home-btn").style.display="inline-flex";'

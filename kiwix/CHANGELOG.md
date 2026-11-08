@@ -1,5 +1,9 @@
 # Changelog
 
+## 1.7.9
+
+- The top of an article is no longer hidden under the search bar: the page makes room for the bar, whatever its height.
+
 ## 1.7.8
 
 - Articles now run all the way down to the bottom edge of the screen on iPhone; the "Forside" button stays clear of the home indicator.
