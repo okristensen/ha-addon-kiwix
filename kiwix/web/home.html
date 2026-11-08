@@ -102,6 +102,13 @@
     .scopes { display: flex; gap: 8px; justify-content: center; flex-wrap: wrap; margin-top: 4px; }
     .scopes:empty { display: none; }
     body:has(#apps-slot > *) { padding-bottom: 0; }
+    /* The "Flere apps" card brings its own Home Assistant theme names; map them to this page. */
+    #apps-slot {
+      --primary-text-color: var(--text); --secondary-text-color: var(--muted);
+      --card-background-color: var(--card); --ha-card-background: var(--card);
+      --divider-color: var(--border); --kiwix-shadow: var(--shadow);
+      margin-top: 24px; overflow-x: clip;
+    }
     .bm { list-style: none; margin: 0; padding: 0; display: grid; gap: 8px; }
     .bm li {
       display: flex; align-items: center; gap: 6px; background: var(--card); border: 1px solid var(--border);

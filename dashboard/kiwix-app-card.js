@@ -133,10 +133,12 @@ class KiwixAppCard extends HTMLElement {
           slot.appendChild(box);
           box.hidden = false;
           this._inFrame = true;
+          this._styleSlot(doc);
           frame.contentWindow.addEventListener(
             "pagehide",
             () => {
               this._inFrame = false;
+              this._unstyleSlot();
               box.hidden = true;
               this.shadowRoot.appendChild(box);
             },
@@ -169,6 +171,34 @@ class KiwixAppCard extends HTMLElement {
     };
     frame.addEventListener("load", check);
     check();
+  }
+
+  // Inside the front page there is no Home Assistant "ha-card", so the card is given the
+  // same look as the book cards. Re-applied whenever the card redraws itself.
+  _styleSlot(doc) {
+    const root = this._apps && this._apps.shadowRoot;
+    if (!root) return;
+    const put = () => {
+      if (root.getElementById("kiwix-slot-style")) return;
+      const style = doc.createElement("style");
+      style.id = "kiwix-slot-style";
+      style.textContent =
+        "ha-card{display:block;box-sizing:border-box;margin:0 16px 16px;background:var(--card-background-color,#fff);" +
+        "border:1px solid var(--divider-color,#e1e5ea);border-radius:20px;box-shadow:var(--kiwix-shadow,none)}";
+      root.appendChild(style);
+    };
+    put();
+    if (this._slotObserver) this._slotObserver.disconnect();
+    this._slotObserver = new MutationObserver(put);
+    this._slotObserver.observe(root, { childList: true });
+  }
+
+  _unstyleSlot() {
+    if (this._slotObserver) this._slotObserver.disconnect();
+    this._slotObserver = null;
+    const root = this._apps && this._apps.shadowRoot;
+    const style = root && root.getElementById("kiwix-slot-style");
+    if (style) style.remove();
   }
 
   // The size of the device's safe area (notch, home indicator) on one side, in px.

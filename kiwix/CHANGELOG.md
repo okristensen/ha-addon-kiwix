@@ -1,5 +1,9 @@
 # Changelog
 
+## 1.9.1
+
+- The "Flere apps" card at the bottom of the front page now has the same card look and margins as the books, which fixes the sideways scrolling.
+
 ## 1.9.0
 
 - Bookmarks: a star button at the bottom right of every article (next to "Forside") saves it to your bookmarks, and tapping it again removes it.
