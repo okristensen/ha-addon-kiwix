@@ -48,6 +48,13 @@ password: <the bridge user's password>
 entities:
   - pattern: vacuum.robot          # exact id or a glob such as sensor.robot_*
     apps: [vacuum]                 # which apps may read it
+  - pattern: sensor.*_power
+    apps: [energy]
+    seconds: 15                    # optional: at most one write per entity every 15 s (default 2)
+images:                            # optional: copy the picture of image entities
+  - entity_id: image.robot_map     # exact id, no wildcards
+    apps: [vacuum]
+    seconds: 60                    # optional: at most one copy per minute (default 60, minimum 10)
 commands:
   - app: vacuum
     command: start
@@ -75,8 +82,18 @@ log_level: info
   or `{"type":"int_list","max_items":…,"min":…,"max":…}`. An argument that is
   not declared is rejected.
 - A pattern must name a domain (`sensor.robot_*`, not `*`).
-- Optional `states_table`, `commands_table`, `heartbeat_table` override the
-  table names (`bro_tilstande`, `bro_kommandoer`, `bro_puls`).
+- `seconds` on an entity pattern is the shortest time between two writes of
+  the same entity. Use it for values that change every second (power
+  meters); the latest value is always the one written. When several
+  patterns match, the largest value wins.
+- `images` copies the picture behind an `image` entity to the images table
+  as base64, whenever the entity's state (its timestamp) has changed. The
+  entity's own state is published too. Pictures over 400 kB, and anything
+  that is not PNG, JPEG, WebP or GIF, are skipped. The signed picture URL
+  (`entity_picture`) is never published.
+- Optional `states_table`, `commands_table`, `heartbeat_table`,
+  `images_table` override the table names (`bro_tilstande`,
+  `bro_kommandoer`, `bro_puls`, `bro_billeder`).
 
 ## How fast is it
 

@@ -140,3 +140,22 @@ revoke all on public.bro_enheder, public.bro_adgang, public.bro_tilstande, publi
 
 -- 6. Realtime: broen lytter efter nye kommandoer, apps'ene efter udfald og tilstande. RLS gælder også dér.
 alter publication supabase_realtime add table public.bro_kommandoer, public.bro_tilstande, public.bro_puls;
+
+-- 7. Billeder (fra version 0.2.0): billedet bag image-entiteter, fx støvsugerens kort, som base64. Kun broen skriver.
+create table public.bro_billeder (
+  id        text primary key check (id like 'image.%' and length(id) <= 120),
+  apps      text[] not null check (cardinality(apps) between 1 and 5),
+  type      text not null check (type in ('image/png', 'image/jpeg', 'image/webp', 'image/gif')),
+  data      text not null check (length(data) <= 600000),
+  opdateret timestamptz not null default now()
+);
+alter table public.bro_billeder enable row level security;
+create policy "bro_billeder: læs egne apps" on public.bro_billeder
+  for select to authenticated using (apps && public.bro_mine_apps() or public.bro_er_bro());
+create policy "bro_billeder: broen opretter" on public.bro_billeder
+  for insert to authenticated with check (public.bro_er_bro());
+create policy "bro_billeder: broen retter" on public.bro_billeder
+  for update to authenticated using (public.bro_er_bro()) with check (public.bro_er_bro());
+create policy "bro_billeder: broen sletter" on public.bro_billeder
+  for delete to authenticated using (public.bro_er_bro());
+revoke all on public.bro_billeder from anon;

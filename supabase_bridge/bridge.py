@@ -7,6 +7,8 @@ Assistant from outside. It does three things:
 * publishes the state of the entities you list to a table, so an app that
   cannot reach Home Assistant can still show them,
 * writes a heartbeat row, so that app can tell when the house is offline,
+* optionally copies the picture of ``image`` entities (e.g. a vacuum map) to a
+  table, because a picture cannot travel as entity state,
 * runs commands that users put in a queue table -- but only commands on its
   own allow-list (the ``commands`` option), with typed, range-checked
   arguments. Whatever the database says, nothing else is ever executed.
@@ -16,6 +18,7 @@ row level security; it never needs the service-role key.
 """
 
 import asyncio
+import base64
 import fnmatch
 import json
 import logging
@@ -27,9 +30,10 @@ from urllib.parse import quote, urlsplit
 
 import aiohttp
 
-VERSION = "0.1.0"
+VERSION = "0.2.0"
 OPTIONS_FILE = os.environ.get("BRIDGE_OPTIONS", "/data/options.json")
 HA_WS = os.environ.get("BRIDGE_HA_WS", "ws://supervisor/core/websocket")
+HA_HTTP = os.environ.get("BRIDGE_HA_HTTP", "http://supervisor/core/api")
 HA_TOKEN = os.environ.get("SUPERVISOR_TOKEN", "")
 
 # Never published, whatever the entity: tokens and signed URLs live here.
@@ -38,7 +42,9 @@ MAX_STATE_BYTES = 15000
 HEARTBEAT_SECONDS = 20
 POLL_SECONDS_NO_REALTIME = 3
 POLL_SECONDS_REALTIME = 15
-MIN_SECONDS_BETWEEN_WRITES = 2  # per entity
+MIN_SECONDS_BETWEEN_WRITES = 2  # per entity, unless the pattern sets its own "seconds"
+MAX_IMAGE_BYTES = 400_000
+IMAGE_TYPES = ("image/png", "image/jpeg", "image/webp", "image/gif")
 
 log = logging.getLogger("bridge")
 
@@ -79,7 +85,15 @@ def load_options():
             raise ConfigError(f"entity pattern '{pattern}' must name a domain, e.g. sensor.vacuum_*")
         if not apps:
             raise ConfigError(f"entity pattern '{pattern}' has no apps")
-        entities.append((pattern, apps))
+        entities.append((pattern, apps, max(1, int(item.get("seconds") or MIN_SECONDS_BETWEEN_WRITES))))
+
+    images = []
+    for item in raw.get("images") or []:
+        entity_id = str(item.get("entity_id") or "").strip()
+        apps = [str(a) for a in (item.get("apps") or []) if a]
+        if not entity_id.startswith("image.") or "*" in entity_id or not apps:
+            raise ConfigError(f"image '{entity_id}' needs an image.* entity_id (no wildcards) and apps")
+        images.append({"entity_id": entity_id, "apps": apps, "seconds": max(10, int(item.get("seconds") or 60))})
 
     commands = {}
     for item in raw.get("commands") or []:
@@ -116,6 +130,8 @@ def load_options():
         "entities": entities,
         "commands": commands,
         "responses": responses,
+        "images": images,
+        "images_table": str(raw.get("images_table") or "bro_billeder"),
         "max_per_minute": int(raw.get("max_commands_per_minute") or 30),
         "states_table": str(raw.get("states_table") or "bro_tilstande"),
         "commands_table": str(raw.get("commands_table") or "bro_kommandoer"),
@@ -318,6 +334,18 @@ class HomeAssistant:
         await self.ws.send_json(message)
         return await asyncio.wait_for(future, timeout)
 
+    async def image(self, entity_id):
+        """The current picture of an image entity: (content type, bytes)."""
+        async with self.session.get(
+            f"{HA_HTTP}/image_proxy/{quote(entity_id)}", headers={"Authorization": f"Bearer {HA_TOKEN}"},
+            timeout=aiohttp.ClientTimeout(total=30),
+        ) as resp:
+            if resp.status != 200:
+                raise RuntimeError(f"image_proxy answered {resp.status}")
+            content_type = (resp.headers.get("Content-Type") or "").split(";")[0].strip().lower()
+            body = await resp.content.read(MAX_IMAGE_BYTES + 1)
+            return content_type, body
+
     async def call_service(self, service, entity_id, data, return_response=False):
         domain, name = service.split(".")
         message = {"type": "call_service", "domain": domain, "service": name,
@@ -338,6 +366,8 @@ class Bridge:
         self.session = session
         self.dirty = {}          # entity_id -> row waiting to be written
         self.last_write = {}     # entity_id -> monotonic time of last write
+        self.image_state = {}    # image entity_id -> state (a timestamp) last seen
+        self.image_sent = {}     # image entity_id -> state last uploaded
         self.published = set()   # entity ids seen in the first batch
         self.first_batch_done = asyncio.Event()
         self.handled = set()     # command ids already run (never run twice)
@@ -349,10 +379,18 @@ class Bridge:
 
     def apps_for(self, entity_id):
         apps = []
-        for pattern, pattern_apps in self.options["entities"]:
+        for pattern, pattern_apps, _seconds in self.options["entities"]:
             if fnmatch.fnmatchcase(entity_id, pattern):
                 apps.extend(a for a in pattern_apps if a not in apps)
+        for image in self.options["images"]:  # an image entity's own state is published too
+            if image["entity_id"] == entity_id:
+                apps.extend(a for a in image["apps"] if a not in apps)
         return apps
+
+    def seconds_for(self, entity_id):
+        """Shortest time between two writes of this entity (the largest value among matching patterns)."""
+        values = [seconds for pattern, _apps, seconds in self.options["entities"] if fnmatch.fnmatchcase(entity_id, pattern)]
+        return max(values) if values else MIN_SECONDS_BETWEEN_WRITES
 
     def on_state(self, entity_id, state, initial):
         if entity_id is None:
@@ -363,6 +401,8 @@ class Bridge:
             return
         if initial:
             self.published.add(entity_id)
+        if entity_id.startswith("image.") and state is not None:
+            self.image_state[entity_id] = state.get("state")
         self.dirty[entity_id] = self.row(entity_id, apps, state)
 
     @staticmethod
@@ -385,7 +425,7 @@ class Bridge:
         while True:
             await asyncio.sleep(0.5)
             now = time.monotonic()
-            ready = [eid for eid in self.dirty if now - self.last_write.get(eid, 0) >= MIN_SECONDS_BETWEEN_WRITES]
+            ready = [eid for eid in self.dirty if now - self.last_write.get(eid, 0) >= self.seconds_for(eid)]
             if not ready:
                 continue
             rows = [self.dirty.pop(eid) for eid in ready[:200]]
@@ -435,6 +475,41 @@ class Bridge:
                     next_run[item["id"]] = time.monotonic() + 300
                 self.dirty[item["id"]] = self.row(item["id"], item["apps"], state)
             await asyncio.sleep(30)
+
+    # -- images
+
+    async def publish_images(self):
+        """Copies the picture of each listed image entity whenever its state (a timestamp) has changed."""
+        if not self.options["images"]:
+            return
+        table = self.options["images_table"]
+        await self.first_batch_done.wait()
+        next_run = {image["entity_id"]: 0 for image in self.options["images"]}
+        while True:
+            for image in self.options["images"]:
+                entity_id = image["entity_id"]
+                state = self.image_state.get(entity_id)
+                if state in (None, "unknown", "unavailable") or state == self.image_sent.get(entity_id):
+                    continue
+                if time.monotonic() < next_run[entity_id]:
+                    continue
+                next_run[entity_id] = time.monotonic() + image["seconds"]
+                try:
+                    content_type, body = await self.ha.image(entity_id)
+                    if content_type not in IMAGE_TYPES:
+                        raise RuntimeError(f"unexpected content type {content_type or '(none)'}")
+                    if len(body) > MAX_IMAGE_BYTES:
+                        raise RuntimeError(f"picture is larger than {MAX_IMAGE_BYTES} bytes")
+                    await self.supabase.rest("POST", table, params={"on_conflict": "id"}, body={
+                        "id": entity_id, "apps": image["apps"], "type": content_type,
+                        "data": base64.b64encode(body).decode("ascii"), "opdateret": now_iso()},
+                        prefer="resolution=merge-duplicates,return=minimal")
+                    self.image_sent[entity_id] = state
+                    log.debug("wrote image %s (%d bytes)", entity_id, len(body))
+                except Exception as err:
+                    log.warning("image %s failed: %s", entity_id, err)
+                    next_run[entity_id] = time.monotonic() + 300
+            await asyncio.sleep(5)
 
     # -- heartbeat
 
@@ -575,7 +650,7 @@ class Bridge:
     async def run(self):
         await self.supabase.token()  # fail early and clearly on a wrong login
         tasks = [asyncio.create_task(coro) for coro in (
-            self.ha.run(), self.write_states(), self.remove_stale_states(), self.publish_responses(),
+            self.ha.run(), self.write_states(), self.remove_stale_states(), self.publish_responses(), self.publish_images(),
             self.heartbeat(), self.commands(), self.realtime())]
         try:
             await asyncio.gather(*tasks)
