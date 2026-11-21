@@ -147,3 +147,7 @@ Issues and pull requests are welcome.
 ## License
 
 [MIT](LICENSE)
+
+## Klar-bro (Supabase bridge)
+
+A second, unrelated app in this repository: an outbound-only bridge that lets a web app show and control a few things in Home Assistant through a Supabase database, with no remote access to Home Assistant. See [supabase_bridge/DOCS.md](supabase_bridge/DOCS.md).
