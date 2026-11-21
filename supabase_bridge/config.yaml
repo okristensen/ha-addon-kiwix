@@ -1,0 +1,50 @@
+name: Klar-bro (Supabase bridge)
+version: "0.1.0"
+slug: supabase_bridge
+description: Outbound-only bridge to a Supabase database – publishes selected entity states and runs commands from a fixed allow-list. Needs no remote access to Home Assistant.
+url: https://github.com/okristensen/ha-addon-kiwix
+arch:
+  - aarch64
+  - amd64
+init: false
+startup: application
+boot: auto
+homeassistant_api: true
+options:
+  supabase_url: ""
+  supabase_anon_key: ""
+  email: ""
+  password: ""
+  entities: []
+  commands: []
+  responses: []
+  max_commands_per_minute: 30
+  log_level: info
+schema:
+  supabase_url: url
+  supabase_anon_key: str
+  email: email
+  password: password
+  entities:
+    - pattern: str
+      apps:
+        - str
+  commands:
+    - app: str
+      command: str
+      service: str
+      entity_id: str
+      data: str?
+      args: str?
+  responses:
+    - id: str
+      apps:
+        - str
+      service: str
+      entity_id: str
+      interval_minutes: int(1,1440)?
+  max_commands_per_minute: int(1,600)
+  states_table: str?
+  commands_table: str?
+  heartbeat_table: str?
+  log_level: list(debug|info|warning)
