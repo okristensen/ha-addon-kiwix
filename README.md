@@ -42,7 +42,7 @@ needed once the content is downloaded.
 **Home Assistant integration**
 
 - Opens inside Home Assistant through ingress, so it works in the mobile app and
-  through Home Assistant Cloud. The reader is also available directly on port 8080.
+  through Home Assistant Cloud. No host port is published (since 1.12.0).
 - Publishes `sensor.kiwix_library` (files, sizes, free space, downloads and
   available updates) and creates a notification when new versions are found.
 - An optional dashboard card shows the whole app on a dashboard.
@@ -55,8 +55,7 @@ needed once the content is downloaded.
 3. Open **Opslag** in the sidebar and pick a ZIM file from the catalog (for
    example *Wikipedia, Danish*, or a small one such as a Wiktionary to try it).
    Press **Download**.
-4. When the download is done, press **Open Opslag** to read – or browse to
-   `http://<home-assistant>:8080`.
+4. When the download is done, press **Open Opslag** to read.
 
 Supported architectures: `aarch64`, `amd64`.
 
@@ -124,8 +123,10 @@ so it comes back by itself after Home Assistant restarts.
 - ZIM files are stored in `/share/kiwix`, so they survive app updates and can be
   reached through the Samba share. Settings, hidden books and bookmarks are small
   JSON files in the same folder (`.settings.json`, `.hidden.json`, `.bookmarks.json`).
-- Port 8080 is plain HTTP on your local network. Inside Home Assistant the reader
-  is served through ingress, which also works remotely.
+- No host port is published: the reader is served through Home Assistant's ingress
+  only, which also works remotely. Content from ZIM files is served in a sandbox
+  (`Content-Security-Policy: sandbox ...`), so scripts in articles cannot reach
+  the app.
 - Filenames follow the Kiwix convention (`name_YYYY-MM.zim`); the update check
   compares the date in the name with the catalog.
 - Only administrators can download, update, hide or delete content. Everyone who

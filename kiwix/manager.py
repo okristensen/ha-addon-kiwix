@@ -19,6 +19,7 @@ import http.client
 import ipaddress
 import json
 import os
+import posixpath
 import re
 import shutil
 import signal
@@ -69,6 +70,56 @@ FORWARDED_HEADERS = {
     "accept", "accept-language", "if-modified-since", "if-none-match", "range",
     "referer", "user-agent",
 }
+
+# Everything from a ZIM file (articles, images, scripts) is content from
+# outside. It is served in a sandbox without allow-same-origin, so a script in
+# an article gets an opaque origin and can reach neither the reader's own
+# pages, nor the cookies, nor the API. kiwix-serve's own pages (viewer, search,
+# catalog, skin) are exempt, and so are PDFs, where the sandbox breaks the
+# viewer in some browsers.
+SANDBOX_CSP = "sandbox allow-scripts allow-forms allow-popups"
+OWN_PAGE_PREFIXES = ("/reader/skin/", "/reader/catalog/", "/reader/catch/")
+OWN_PAGES = {
+    "/reader", "/reader/search", "/reader/suggest", "/reader/viewer",
+    "/reader/viewer_settings.js", "/reader/random", "/reader/nojs",
+}
+# Sandboxed frames send "Origin: null". Only the bookmark route answers them.
+CORS_ROUTES = {"/api/bookmarks"}
+
+
+def needs_sandbox(request_path, content_type):
+    """Tell whether a reader response must carry the sandbox policy.
+
+    The default is yes: only kiwix-serve's own pages and PDFs are left out.
+    The path is normalised first (percent-decoding, "..", doubled slashes), so
+    an odd spelling of a content path can never look like an own page.
+    """
+    if (content_type or "").split(";", 1)[0].strip().lower() == "application/pdf":
+        return False
+    path = urllib.parse.unquote(request_path.split("?", 1)[0].split("#", 1)[0])
+    if "%" in path or "\\" in path or "\x00" in path:
+        return True
+    path = posixpath.normpath(path)
+    if path.startswith("//"):
+        path = "/" + path.lstrip("/")
+    if path in OWN_PAGES or path.startswith(OWN_PAGE_PREFIXES):
+        return False
+    return True
+
+
+def post_policy(route, origin, content_type):
+    """Decide a POST before it reaches any route.
+
+    Returns (status, error, cors_origin): status 0 lets the request on.
+    cors_origin is "null" when the answer should carry CORS headers.
+    """
+    origin = (origin or "").strip()
+    if origin == "null" and route not in CORS_ROUTES:
+        return 403, "Forbidden", None
+    if (content_type or "").split(";", 1)[0].strip().lower() != "application/json":
+        return 415, "Content-Type must be application/json", None
+    return 0, None, ("null" if origin == "null" else None)
+
 
 STATIC_TYPES = {
     "index.html": "text/html; charset=utf-8",
@@ -309,15 +360,14 @@ BOOKMARK_SNIPPET = r"""<style>
 <div id="kiwix-bm-toast" role="status" aria-live="polite"></div>
 <script>(function(){
 var API=__API__,L=__LABELS__;
-var framed=false;try{framed=parent!==window&&/\/reader\/viewer/.test(parent.location.pathname)}catch(e){}
-if(framed)return;
+var real=new URL(location.href).origin,isViewer=/\/reader\/viewer\/?$/.test(location.pathname),vtitle="";
 var btn=document.getElementById("kiwix-bm"),toast=document.getElementById("kiwix-bm-toast"),items=[],tt=0;
 function cur(){
  var p=location.pathname,m,book,path,title;
  try{
   if(/\/reader\/viewer\/?$/.test(p)&&location.hash.length>1){
    m=decodeURIComponent(location.hash.slice(1)).split("/");book=m.shift();path=m.join("/");
-   try{var f=document.querySelector("iframe");title=f&&f.contentDocument&&f.contentDocument.title}catch(e){}
+   title=vtitle;
   }else if((m=p.match(/\/content\/([^\/]+)\/(.+)$/))){book=m[1];path=decodeURIComponent(m[2]);title=document.title}
  }catch(e){return null}
  if(!book||!path)return null;
@@ -329,9 +379,29 @@ function load(){fetch(API).then(function(r){return r.json()}).then(function(d){i
 function say(t){toast.textContent=t;toast.classList.add("show");clearTimeout(tt);tt=setTimeout(function(){toast.classList.remove("show")},1600)}
 btn.addEventListener("click",function(){var c=cur();if(!c)return;var on=!has(c);
  items=items.filter(function(b){return!(b.book===c.book&&b.path===c.path)});if(on)items.unshift(c);show();say(on?L.added:L.removed);
- fetch(API,{method:"POST",headers:{"Content-Type":"application/json"},body:JSON.stringify({action:on?"add":"remove",book:c.book,path:c.path,title:c.title})})
+ fetch(API,{method:"POST",credentials:"include",headers:{"Content-Type":"application/json"},body:JSON.stringify({action:on?"add":"remove",book:c.book,path:c.path,title:c.title})})
   .then(function(r){if(!r.ok)throw 0}).catch(function(){say(L.failed);load()})});
-addEventListener("hashchange",show);addEventListener("pageshow",load);load();
+function start(){addEventListener("hashchange",show);addEventListener("pageshow",load);load()}
+/* Article frames talk to the viewer with postMessage only. The viewer accepts messages from exactly
+   its own iframe, whose sandboxed origin is "null"; the frame accepts replies from its parent at the
+   page's own origin (taken from its URL; document.origin is "null" in a sandbox). */
+if(isViewer){
+ addEventListener("message",function(e){
+  var f=document.querySelector("iframe"),d=e.data,m;
+  if(e.origin!=="null"||!f||e.source!==f.contentWindow||!d||typeof d!=="object")return;
+  if(d.kiwix==="hello"){e.source.postMessage({kiwix:"viewer"},"*")}
+  else if(d.kiwix==="nav"&&typeof d.path==="string"){
+   vtitle=String(d.title||"").slice(0,300);
+   if((m=d.path.match(/\/content\/([^\/]+)\/(.+)$/)))try{history.replaceState(null,"","#"+m[1]+"/"+m[2])}catch(x){}
+   show()}});
+ start()
+}else if(parent===window){start()}
+else{
+ var linked=false;
+ addEventListener("message",function(e){if(e.source===parent&&e.origin===real&&e.data&&e.data.kiwix==="viewer")linked=true});
+ /* No viewer answered: not framed by the reader, so this page carries its own button. */
+ setTimeout(function(){if(!linked)start()},1500)
+}
 })();</script>"""
 
 BOOKMARK_LABELS = {
@@ -374,13 +444,21 @@ def add_home_button(html, accept_language, ingress_path, pad=True):
         "<style>@media (prefers-color-scheme:dark){#kiwix-back-btn{background:#252b33!important}}</style>"
         "<script>(function(){function f(){var b=document.getElementById(\"kiwixtoolbar\");document.documentElement.style.setProperty(\"--kiwix-tbh\",(b?b.offsetHeight:0)+\"px\")}f();addEventListener(\"load\",f);addEventListener(\"resize\",f);setInterval(f,700)})();</script>"
         "<script>(function(){var pend=0,typing=0,tm=0;function box(){return document.getElementById(\"kiwixsearchbox\")}function show(){var b=box();if(!b)return;var p=b.parentElement;var s=document.getElementById(\"kiwix-spin\");if(!s){s=document.createElement(\"span\");s.id=\"kiwix-spin\";s.setAttribute(\"aria-hidden\",\"true\");if(getComputedStyle(p).position===\"static\")p.style.position=\"relative\";p.appendChild(s)}document.documentElement.classList.toggle(\"kiwix-busy\",pend>0||typing>0);b.setAttribute(\"aria-busy\",(pend>0||typing>0)?\"true\":\"false\")}function isS(u){return/\\/suggest(\\?|$)/.test(String(u&&u.url||u))}var F=window.fetch;if(F)window.fetch=function(a){var q=isS(a);if(q){pend++;typing=0;show()}var r=F.apply(this,arguments);if(q){var d=function(){pend=Math.max(pend-1,0);show()};r.then(d,d)}return r};var X=XMLHttpRequest.prototype.open;XMLHttpRequest.prototype.open=function(m,u){if(isS(u)){var x=this;pend++;typing=0;show();x.addEventListener(\"loadend\",function(){pend=Math.max(pend-1,0);show()})}return X.apply(this,arguments)};document.addEventListener(\"input\",function(e){if(e.target&&e.target.id===\"kiwixsearchbox\"){typing=e.target.value.trim().length>=2?1:0;show();clearTimeout(tm);tm=setTimeout(function(){typing=0;show()},4000)}},true)})();</script>"
-        "<script>(function(){var framed=false;"
-        "try{framed=parent!==window&&/\\/reader\\/viewer/.test(parent.location.pathname)}catch(e){}"
-        'if(!framed){var hb=document.getElementById("kiwix-home-btn"),bb=document.getElementById("kiwix-back-btn");hb.style.display="inline-flex";'
-        'bb.style.display="grid";'
-        'bb.onclick=function(){if(history.length>1)history.back();else location.href=hb.href};'
-        + ('document.body.style.paddingBottom="calc(76px + var(--kiwix-sab,env(safe-area-inset-bottom)))"' if pad else "")
-        + "}})();</script>"
+        "<script>(function(){var hb=document.getElementById(\"kiwix-home-btn\"),bb=document.getElementById(\"kiwix-back-btn\");"
+        "function go(){hb.style.display=\"inline-flex\";bb.style.display=\"grid\";"
+        "bb.onclick=function(){if(history.length>1)history.back();else location.href=hb.href};"
+        + ('document.body.style.paddingBottom=\"calc(76px + var(--kiwix-sab,env(safe-area-inset-bottom)))\"' if pad else "")
+        + "}"
+        "var real=new URL(location.href).origin;"
+        # Not framed, or the viewer itself: show the buttons. An article frame inside the viewer does
+        # without (the viewer carries them): the viewer confirms itself by postMessage, never by
+        # reading the parent's location.
+        "if(parent===window||/\\/reader\\/viewer\\/?$/.test(location.pathname)){go();return}"
+        "var ok=false;"
+        "addEventListener(\"message\",function(e){if(e.source===parent&&e.origin===real&&e.data&&e.data.kiwix===\"viewer\")ok=true});"
+        "function hi(){try{parent.postMessage({kiwix:\"hello\"},real);parent.postMessage({kiwix:\"nav\",path:location.pathname,title:document.title},real)}catch(x){}}"
+        "hi();setTimeout(hi,400);setTimeout(function(){if(!ok)go()},1500)"
+        "})();</script>"
     ).encode() + bookmark_snippet(accept_language, ingress_path)
     index = html.lower().rfind(b"</body>")
     if index == -1:
@@ -1133,8 +1211,14 @@ class Handler(BaseHTTPRequestHandler):
         log(f"{self.client_address[0]} {fmt % args}")
 
     # -- helpers ---------------------------------------------------------
+    _cors_origin = None
+
     def _send(self, status, body, content_type):
         self.send_response(status)
+        if self._cors_origin:
+            self.send_header("Access-Control-Allow-Origin", self._cors_origin)
+            self.send_header("Access-Control-Allow-Credentials", "true")
+            self.send_header("Vary", "Origin")
         self.send_header("Content-Type", content_type)
         self.send_header("Content-Length", str(len(body)))
         self.send_header("Cache-Control", "no-store")
@@ -1182,6 +1266,9 @@ class Handler(BaseHTTPRequestHandler):
         elif route == "/api/me":
             self._json(200, {"admin": self._is_admin(), **self._network()})
         elif route == "/api/bookmarks":
+            # Sandboxed article frames read their own bookmarks too (Origin: null).
+            if self.headers.get("Origin", "").strip() == "null":
+                self._cors_origin = "null"
             self._json(200, {"bookmarks": get_bookmarks(self.headers.get("X-Remote-User-Id", "").strip())})
         elif route == "/api/catalog":
             if self._is_admin():
@@ -1201,10 +1288,35 @@ class Handler(BaseHTTPRequestHandler):
             else:
                 self._json(404, {"error": "Not found"})
 
+    def do_OPTIONS(self):  # noqa: N802
+        """CORS preflight: only the bookmark route, only for sandboxed frames (Origin: null)."""
+        if not self._guard():
+            return
+        route = "/" + urllib.parse.urlparse(self.path).path.strip("/")
+        if route in CORS_ROUTES and self.headers.get("Origin", "").strip() == "null":
+            self.send_response(204)
+            self.send_header("Access-Control-Allow-Origin", "null")
+            self.send_header("Access-Control-Allow-Credentials", "true")
+            self.send_header("Access-Control-Allow-Methods", "GET, POST")
+            self.send_header("Access-Control-Allow-Headers", "Content-Type")
+            self.send_header("Access-Control-Max-Age", "600")
+            self.send_header("Vary", "Origin")
+            self.send_header("Content-Length", "0")
+            self.end_headers()
+        else:
+            self._json(403, {"error": "Forbidden"})
+
     def do_POST(self):  # noqa: N802
         if not self._guard():
             return
         route = "/" + urllib.parse.urlparse(self.path).path.strip("/")
+        status, error, cors = post_policy(
+            route, self.headers.get("Origin", ""), self.headers.get("Content-Type", "")
+        )
+        if status:
+            self._json(status, {"error": error})
+            return
+        self._cors_origin = cors
         if route == "/api/bookmarks":
             # Bookmarks belong to the person using the app, not only to administrators.
             body = self._body()
@@ -1334,6 +1446,8 @@ class Handler(BaseHTTPRequestHandler):
                 if key.lower() in HOP_BY_HOP or (body is not None and key.lower() == "content-length"):
                     continue
                 self.send_header(key, value)
+            if needs_sandbox(self.path, upstream.getheader("Content-Type", "")):
+                self.send_header("Content-Security-Policy", SANDBOX_CSP)
             if body is not None:
                 self.send_header("Content-Length", str(len(body)))
             self.end_headers()

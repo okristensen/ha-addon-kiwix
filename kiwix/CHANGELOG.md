@@ -1,5 +1,14 @@
 # Changelog
 
+## 1.12.0
+
+Sikkerhed (fra sikkerhedsreviewet uge 46):
+
+- Alt indhold fra ZIM-filer (artikler, billeder, scripts) leveres nu med `Content-Security-Policy: sandbox allow-scripts allow-forms allow-popups`, så et script i en artikel ikke kan nå appens egne sider, cookies eller API. Kiwix-serves egne sider (viewer, søgning, katalog) og PDF'er er undtaget.
+- Artikelrammen taler med viewer-siden udelukkende via `postMessage` med et fast origin-tjek; intet læser længere forældre-rammens adresse eller dokument direkte.
+- Bogmærke-ruten svarer kun med CORS-headere til sandboxede rammer (Origin `null`). Alle POST-ruter kræver `Content-Type: application/json`, og de øvrige ruter afviser Origin `null` med 403.
+- Værtsporten 8080 er fjernet: Opslag nås kun gennem Home Assistant (ingress). Det direkte link (`http://<ha>:8080`) findes ikke længere.
+
 ## 1.11.2
 
 - Documentation rewritten for the app's current name and features (English first); clearer store description.

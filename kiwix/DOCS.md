@@ -11,8 +11,8 @@ Assistant, with no internet needed afterwards.
    first, with English below. Narrow them by category, then press **Download** on
    the content you want (for example *Wikipedia, Danish*).
 3. When the download finishes, the reader starts automatically. Press **Open
-   Opslag** to read inside Home Assistant, or use the direct link
-   (`http://<home-assistant>:8080`) to open it in a separate browser tab.
+   Opslag** to read inside Home Assistant. The reader is only available through Home
+   Assistant (no separate port).
 
 ## Reading
 
@@ -60,5 +60,5 @@ app on a dashboard (see the repository README for both).
 
 ## Configuration
 
-There are no options. The direct link uses port 8080; change the host port on the
-app's **Network** tab if it clashes with something else.
+There are no options. The app publishes no host port; it is reached through Home
+Assistant (ingress) only.

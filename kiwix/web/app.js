@@ -156,19 +156,14 @@ function renderState() {
   $("status").textContent =
     `${state.running ? t.running : t.stopped} · ${formatSize(state.free)} ${t.free}`;
 
-  // The reader opens inside Home Assistant when it is available through ingress;
-  // otherwise fall back to the published port.
-  const direct = `${location.protocol}//${location.hostname}:${state.port}/`;
+  // The reader is only reachable through Home Assistant's ingress (no published host port).
   const open = $("open");
-  open.hidden = !state.running;
+  open.hidden = !(state.running && state.reader);
   open.textContent = t.open;
-  open.href = state.reader ? "reader/" : direct;
-  open.target = state.reader ? "" : "_blank";
+  open.href = "reader/";
+  open.target = "";
 
-  const link = $("direct");
-  link.hidden = !(state.running && state.reader);
-  link.textContent = t.direct;
-  link.href = direct;
+  $("direct").hidden = true;
 
   $("downloads-section").hidden = state.downloads.length === 0;
   $("downloads").replaceChildren(...state.downloads.map(renderDownload));
