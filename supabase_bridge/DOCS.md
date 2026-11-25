@@ -106,3 +106,22 @@ most once every 2 seconds per entity.
 
 Stop the app. No command is run while it is stopped, the heartbeat goes
 stale, and queued commands expire by themselves.
+
+## Kanariefugle og kørsels-id
+
+Fra 0.2.1 vogter broen sig selv på to måder. Begge giver en alarm (en persistent notifikation i Home Assistant og en push til telefonen), højst én af hver slags pr. 30 minutter.
+
+- **Kørsels-id:** ved start laver broen et tilfældigt id og skriver det i kolonnen `koersel` på `bro_puls` ved hvert pulsslag, og læser det derefter tilbage. Er det et andet id, skriver en anden som broen (fx med stjålet login): alarmen hedder "Klar-bro: fremmed skriver". Tabellen skal have kolonnen (`alter table public.bro_puls add column koersel text check (length(koersel) <= 40);`); mangler den, logger broen én advarsel og kører videre uden tjekket. Det ses ikke, hvis en fremmed skriver uden kolonnen `koersel`.
+- **Kanarie-kommando:** en række i kommandokøen med kommandoen `vagt_kanarie`, eller med en kommando, der ikke står på broens egen `commands`-liste, afvises som altid og udløser alarmen "Klar-bro: kanarie-kommando i køen" med kommandoens navn og de første 8 tegn af afsenderens bruger-id. Broen kører aldrig sådan en kommando. Står en kommando i databasens liste, men ikke i broens, giver den også alarm.
+
+Alarmen går til `notify.mobile_app_oles_iphone`; hedder telefonen noget andet, skal navnet rettes i `ALARM_PHONE_SERVICE` i `bridge.py`.
+
+## Updating the pinned versions
+
+The `Dockerfile` pins the base image on digest and `aiohttp` on one version. To bump:
+
+1. Look up the current index digest of `python:3.12-alpine` (`docker buildx imagetools inspect python:3.12-alpine`, or the Docker Hub tags page) and replace the `sha256:` value after `FROM python:3.12-alpine@`.
+2. Pick a `aiohttp` 3.x release that has been out a few weeks (PyPI) and replace the version in the `pip install` line.
+3. Raise `version` in `config.yaml` and `VERSION` in `bridge.py`, add a line to `CHANGELOG.md`, and run `python3 -m unittest supabase_bridge/test_bridge.py`.
+
+Only `aiohttp` itself is pinned; its own dependencies are resolved by pip at build time (no hash checking).

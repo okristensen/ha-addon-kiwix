@@ -23,6 +23,8 @@ import fnmatch
 import json
 import logging
 import os
+import re
+import secrets
 import signal
 import time
 from datetime import datetime, timezone
@@ -30,7 +32,7 @@ from urllib.parse import quote, urlsplit
 
 import aiohttp
 
-VERSION = "0.2.0"
+VERSION = "0.2.1"
 OPTIONS_FILE = os.environ.get("BRIDGE_OPTIONS", "/data/options.json")
 HA_WS = os.environ.get("BRIDGE_HA_WS", "ws://supervisor/core/websocket")
 HA_HTTP = os.environ.get("BRIDGE_HA_HTTP", "http://supervisor/core/api")
@@ -45,6 +47,9 @@ POLL_SECONDS_REALTIME = 15
 MIN_SECONDS_BETWEEN_WRITES = 2  # per entity, unless the pattern sets its own "seconds"
 MAX_IMAGE_BYTES = 400_000
 IMAGE_TYPES = ("image/png", "image/jpeg", "image/webp", "image/gif")
+ALARM_SECONDS = 30 * 60  # at most one alarm of each kind per 30 minutes
+ALARM_PHONE_SERVICE = "notify/mobile_app_oles_iphone"
+CANARY_COMMAND = "vagt_kanarie"  # never on the allow-list; if it shows up in the queue, someone is probing
 
 log = logging.getLogger("bridge")
 
@@ -62,6 +67,34 @@ def parse_time(value):
 
 class ConfigError(Exception):
     pass
+
+
+class AlarmThrottle:
+    """Lets an alarm through at most once per ``seconds`` for each kind."""
+
+    def __init__(self, seconds=ALARM_SECONDS, clock=time.monotonic):
+        self.seconds = seconds
+        self.clock = clock
+        self.last = {}
+
+    def allow(self, kind):
+        now = self.clock()
+        last = self.last.get(kind)
+        if last is not None and now - last < self.seconds:
+            return False
+        self.last[kind] = now
+        return True
+
+
+def is_unlisted_command(commands, row):
+    """True for the canary command and for any command not on the bridge's own allow-list."""
+    name = str(row.get("kommando") or "")
+    return name == CANARY_COMMAND or (str(row.get("app") or ""), name) not in commands
+
+
+def clean_text(value, limit=60):
+    """Text from the database, made harmless for a notification (data, never instructions)."""
+    return re.sub(r"[^\w .:/-]", "?", str(value or ""))[:limit]
 
 
 # ---------------------------------------------------------------- options
@@ -346,6 +379,15 @@ class HomeAssistant:
             body = await resp.content.read(MAX_IMAGE_BYTES + 1)
             return content_type, body
 
+    async def rest_service(self, path, data):
+        """Plain REST service call (/api/services/...), used for the alarms only."""
+        async with self.session.post(
+            f"{HA_HTTP}/services/{path}", json=data, headers={"Authorization": f"Bearer {HA_TOKEN}"},
+            timeout=aiohttp.ClientTimeout(total=20),
+        ) as resp:
+            if resp.status >= 300:
+                raise RuntimeError(f"{path} answered {resp.status}")
+
     async def call_service(self, service, entity_id, data, return_response=False):
         domain, name = service.split(".")
         message = {"type": "call_service", "domain": domain, "service": name,
@@ -374,6 +416,27 @@ class Bridge:
         self.recent_commands = []
         self.poll_now = asyncio.Event()
         self.realtime_joined = False
+        self.run_id = secrets.token_hex(8)  # tells this run's heartbeat from anyone else's
+        self.run_id_column = True           # False when bro_puls has no "koersel" column
+        self.wrote_run_id = False
+        self.alarms = AlarmThrottle()
+
+    # -- alarms
+
+    async def alarm(self, kind, title, message, notification_id):
+        """A persistent notification plus a phone push, at most once per 30 minutes per kind."""
+        if not self.alarms.allow(kind):
+            log.debug("alarm %s held back (sent less than 30 minutes ago)", kind)
+            return
+        log.warning("ALARM: %s - %s", title, message)
+        for path, data in (
+            ("persistent_notification/create", {"title": title, "message": message, "notification_id": notification_id}),
+            (ALARM_PHONE_SERVICE, {"title": title, "message": message}),
+        ):
+            try:
+                await self.ha.rest_service(path, data)
+            except Exception as err:
+                log.warning("could not send the alarm through %s: %s", path, err)
 
     # -- states
 
@@ -513,15 +576,43 @@ class Bridge:
 
     # -- heartbeat
 
+    async def read_run_id(self, table):
+        rows = await self.supabase.rest("GET", table, params={"select": "koersel", "id": "eq.1"}) or []
+        return rows[0].get("koersel") if rows else None
+
+    async def check_run_id(self, table):
+        """Someone else writing as the bridge shows up as another run id in the row."""
+        seen = await self.read_run_id(table)
+        if seen is not None and seen != self.run_id:
+            await self.alarm("fremmed", "Klar-bro: fremmed skriver",
+                             "Klar-bro: en anden skriver som broen. Skift broens Supabase-kodeord og tjek bro_puls.",
+                             "klar_bro_fremmed")
+
     async def heartbeat(self):
         table = self.options["heartbeat_table"]
         await self.ha.connected.wait()
         while True:
             if self.ha.connected.is_set():  # no pulse while the house itself is unreachable
                 try:
-                    await self.supabase.rest("POST", table, params={"on_conflict": "id"},
-                                             body={"id": 1, "sidst": now_iso(), "version": VERSION},
-                                             prefer="resolution=merge-duplicates,return=minimal")
+                    body = {"id": 1, "sidst": now_iso(), "version": VERSION}
+                    if self.run_id_column:
+                        if self.wrote_run_id:
+                            await self.check_run_id(table)  # anything written since our last pulse
+                        body["koersel"] = self.run_id
+                    try:
+                        await self.supabase.rest("POST", table, params={"on_conflict": "id"}, body=body,
+                                                 prefer="resolution=merge-duplicates,return=minimal")
+                    except Exception as err:
+                        if not self.run_id_column or "koersel" not in str(err):
+                            raise
+                        log.warning("the heartbeat table has no 'koersel' column; run id check is off (%s)", err)
+                        self.run_id_column = False
+                        del body["koersel"]
+                        await self.supabase.rest("POST", table, params={"on_conflict": "id"}, body=body,
+                                                 prefer="resolution=merge-duplicates,return=minimal")
+                    if self.run_id_column:
+                        self.wrote_run_id = True
+                        await self.check_run_id(table)  # read back right after our own write
                 except Exception as err:
                     log.warning("heartbeat failed: %s", err)
             await asyncio.sleep(HEARTBEAT_SECONDS)
@@ -533,7 +624,7 @@ class Bridge:
         while True:
             try:
                 rows = await self.supabase.rest("GET", table, params={
-                    "select": "id,app,kommando,argumenter,udloeber", "status": "eq.ny",
+                    "select": "id,user_id,app,kommando,argumenter,udloeber", "status": "eq.ny",
                     "order": "oprettet.asc", "limit": "20"}) or []
                 for row in rows:
                     await self.handle(table, row)
@@ -554,6 +645,11 @@ class Bridge:
         self.handled.add(command_id)
         if len(self.handled) > 5000:
             self.handled = set(list(self.handled)[-1000:])
+        if is_unlisted_command(self.options["commands"], row):
+            await self.alarm("kanarie", "Klar-bro: kanarie-kommando i køen",
+                             f"Kommando '{clean_text(row.get('kommando'))}' (app '{clean_text(row.get('app'))}') "
+                             f"fra bruger {clean_text(row.get('user_id'), 8)} står ikke på broens liste. Den er afvist og ikke kørt.",
+                             "klar_bro_kanarie")
         status, answer = await self.decide(row)
         log.info("command %s/%s -> %s%s", row.get("app"), row.get("kommando"), status, f" ({answer})" if answer else "")
         try:
@@ -568,7 +664,7 @@ class Bridge:
         if expires is None or expires < datetime.now(timezone.utc):
             return "udloebet", "for gammel"
         command = self.options["commands"].get((row.get("app"), row.get("kommando")))
-        if command is None:
+        if command is None or row.get("kommando") == CANARY_COMMAND:  # the canary is never run
             return "afvist", "ukendt kommando"
         now = time.monotonic()
         self.recent_commands = [t for t in self.recent_commands if now - t < 60]

@@ -62,7 +62,8 @@ create policy "bro_tilstande: broen sletter" on public.bro_tilstande
 create table public.bro_puls (
   id      int primary key check (id = 1),
   sidst   timestamptz not null default now(),
-  version text check (length(version) <= 40)
+  version text check (length(version) <= 40),
+  koersel text check (length(koersel) <= 40)  -- broens tilfældige kørsels-id (0.2.1); ældre tabel: alter table public.bro_puls add column koersel text check (length(koersel) <= 40);
 );
 alter table public.bro_puls enable row level security;
 create policy "bro_puls: læs med adgang" on public.bro_puls
